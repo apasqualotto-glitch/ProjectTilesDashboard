@@ -2,7 +2,9 @@
 
 ## Overview
 
-A modern, single-page web application for visual project management inspired by Google Keep, Trello, and Notion. The app features an interactive tile-based dashboard where each tile represents a project category (Research, Charters, Vessels, Equipment, etc.). Users can click tiles to expand them into a full rich-text editor with live preview, drag-and-drop tiles to reorder them, and manage photos within specific categories. All data persists to localStorage, making this a fully client-side application with no backend dependencies.
+A modern, full-stack web application for visual project management inspired by Google Keep, Trello, and Notion. The app features an interactive tile-based dashboard where each tile represents a project category (Research, Charters, Vessels, Equipment, etc.). Users can click tiles to expand them into a full rich-text editor with live preview, drag-and-drop tiles to reorder them, and manage photos within specific categories. 
+
+**Architecture Transition (November 2025)**: The application has transitioned from a localStorage-only client-side app to a PostgreSQL-backed full-stack application with REST API. The frontend currently uses localStorage (legacy compatibility), while the backend provides a complete API foundation for collaborative features including version history, shareable links, reminders, and analytics.
 
 ## User Preferences
 
@@ -20,7 +22,7 @@ Preferred communication style: Simple, everyday language.
 
 **Routing**: Wouter for lightweight client-side routing, though the app is primarily single-page with modal-based interactions rather than route changes.
 
-**Data Persistence**: localStorage for all application data (tiles, photos, settings). Data is serialized to JSON and stored in three keys: `projectos_tiles`, `projectos_photos`, and `projectos_settings`. The app includes automatic migration logic to handle icon format changes from emoji to icon names.
+**Data Persistence**: Currently using localStorage for frontend state (legacy compatibility). Backend PostgreSQL database is fully implemented and operational with REST API endpoints ready for frontend migration. The app includes automatic migration logic to handle icon format changes from emoji to icon names.
 
 **Drag and Drop**: @dnd-kit libraries (@dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities) for implementing tile reordering via drag-and-drop with keyboard support.
 
@@ -75,19 +77,23 @@ Preferred communication style: Simple, everyday language.
 5. **Timeline View**: Chronological activity view showing updates across all tiles
 6. **Import/Export**: JSON-based data portability for backup and migration
 7. **Dark Mode**: Toggle between light and dark themes
-8. **Weather Widget**: Mock weather display in header (designed for future API integration)
+8. **Weather Widget**: Real-time weather display using Open-Meteo API with geolocation support
 
 ### Notable Architectural Decisions
 
-**localStorage Over Backend**: The decision to use localStorage enables zero-configuration deployment and instant data persistence without server infrastructure. Trade-off: data is device-specific and not synchronized across devices.
+**PostgreSQL with Slug Compatibility**: The database schema uses serial integer IDs internally but includes slug fields (string identifiers like "research", "photos") for backward compatibility with the localStorage architecture. This enables a gradual migration from client-side to server-side persistence.
 
-**Context Over Redux**: For this single-page application with relatively simple state (tiles, photos, settings), React Context provides sufficient state management without the boilerplate of Redux. The AppContext centralizes all CRUD operations and provides a clean API to components.
+**Context for Frontend, API for Backend**: The frontend uses React Context (AppContext) for local state management, while the backend provides a REST API for persistent storage. This hybrid approach allows the frontend to continue working with localStorage while the backend infrastructure is ready for migration.
 
 **Quill for Rich Text**: ReactQuill chosen for its balance of features vs. complexity. It provides essential formatting (bold, italic, lists, headings) while outputting clean HTML suitable for preview rendering.
 
-**Base64 for Photos**: Photos stored as Base64 strings in localStorage rather than using IndexedDB or external storage. This simplifies the architecture but limits practical photo count due to localStorage size constraints (typically 5-10MB).
+**Base64 for Photos**: Photos stored as Base64 strings in both localStorage and database. This simplifies the architecture but limits practical photo count due to size constraints (typically 5-10MB in localStorage, larger limits in PostgreSQL).
 
 **Icon Migration Pattern**: The app includes logic to migrate from emoji-based icons to Lucide icon names, demonstrating a pattern for schema evolution in localStorage-based apps.
+
+**Version History via Snapshots**: Each tile update creates a complete snapshot in the tile_versions table before applying changes. This simple append-only pattern enables easy restoration without complex diff algorithms.
+
+**Open-Meteo Weather API**: Real-time weather data fetched from Open-Meteo's free API (10k calls/day, no authentication) with geolocation support and comprehensive fallback handling.
 
 ## External Dependencies
 
@@ -114,9 +120,103 @@ Preferred communication style: Simple, everyday language.
 - **@hookform/resolvers**: Form validation integration
 - **PostCSS & Autoprefixer**: CSS processing
 
-### Backend (Minimal/Unused)
-- **Express**: HTTP server (currently minimal usage - primarily serves static files)
-- **Drizzle ORM**: Database toolkit configured for PostgreSQL but not actively used in current localStorage-based implementation
-- **@neondatabase/serverless**: Neon PostgreSQL driver (configured but unused)
+### Backend
+- **Express**: HTTP server providing 24 REST API endpoints for CRUD operations
+- **Drizzle ORM**: Database toolkit for type-safe PostgreSQL queries
+- **@neondatabase/serverless**: Neon PostgreSQL driver for serverless deployment
+- **Zod**: Request validation for all API inputs
 
-**Note**: The project is configured with Drizzle and PostgreSQL infrastructure (`drizzle.config.ts`, schema definitions) suggesting potential future migration from localStorage to a database-backed architecture. Currently, all data operations use the in-memory `MemStorage` implementation.
+## Backend Architecture (November 2025)
+
+### Database Schema
+
+The application uses PostgreSQL with a normalized schema designed for collaboration and version history:
+
+**Core Tables:**
+- `tiles`: Main content tiles with slug-based identifiers for localStorage compatibility (id, slug, userId, title, content, color, icon, progress, order, template, templateData, timestamps)
+- `photos`: Image attachments linked to tiles via foreign key (id, tileId, base64Data, thumbnail, caption, createdAt)
+- `settings`: User preferences with tile ordering by slugs (id, userId, darkMode, tileOrder array, lastBackup, updatedAt)
+
+**Collaboration Tables:**
+- `tile_versions`: Complete snapshots of tile state for version history and restore (id, tileId, slug, title, content, color, icon, progress, order, template, templateData, createdAt)
+- `shared_links`: Token-based public sharing with expiration (id, tileId, shareToken, isActive, expiresAt, timestamps)
+- `reminders`: Deadline tracking with notification support (id, tileId, dueDate, recurring, notified, createdAt)
+- `analytics_events`: Usage tracking for productivity insights (id, tileId, eventType, duration, createdAt)
+
+**Schema Features:**
+- Slug fields on tiles maintain compatibility with legacy localStorage string IDs ("research", "photos", etc.)
+- Serial integer IDs for database relationships
+- Cascading deletes for referential integrity
+- Comprehensive indexing on foreign keys and frequently queried columns
+- Manual updatedAt timestamp management in application layer (storage.ts)
+- Single-user mode support via nullable userId fields
+
+### REST API
+
+Complete Express API with 24 endpoints covering all CRUD operations:
+
+**Initialization:**
+- POST /api/init - Seed database with default tiles and settings
+
+**Tiles:**
+- GET /api/tiles - List all tiles
+- GET /api/tiles/slug/:slug - Get tile by slug (legacy compatibility)
+- GET /api/tiles/:id - Get tile by database ID
+- POST /api/tiles - Create new tile (validated with Zod)
+- PATCH /api/tiles/:id - Update tile (auto-creates version snapshot)
+- DELETE /api/tiles/:id - Delete tile (cascades to photos/versions)
+
+**Photos:**
+- GET /api/photos - List all photos (optimized single query)
+- GET /api/photos?tileId=X - Filter photos by tile
+- GET /api/tiles/:tileId/photos - Get photos for specific tile
+- POST /api/photos - Upload new photo (validated)
+- DELETE /api/photos/:id - Delete photo
+
+**Settings:**
+- GET /api/settings - Get user settings (creates default if missing)
+- PATCH /api/settings - Update settings (validated)
+
+**Version History:**
+- GET /api/tiles/:tileId/versions - List all versions for tile
+- POST /api/tiles/:tileId/versions/:versionId/restore - Restore tile to specific version
+
+**Collaborative Sharing:**
+- GET /api/tiles/:tileId/shares - List share links for tile
+- POST /api/tiles/:tileId/shares - Create new share link
+- PATCH /api/shares/:id - Update share link (activate/deactivate)
+- DELETE /api/shares/:id - Revoke share link
+- GET /api/shared/:shareToken - Public view of shared tile
+
+**Reminders:**
+- GET /api/tiles/:tileId/reminders - List reminders for tile
+- GET /api/reminders/active - Get active unnotified reminders
+- POST /api/tiles/:tileId/reminders - Create reminder
+- PATCH /api/reminders/:id - Update reminder
+- DELETE /api/reminders/:id - Delete reminder
+
+**Analytics:**
+- POST /api/analytics - Log analytics event
+- GET /api/analytics?tileId=X&limit=100 - Query events
+
+**API Features:**
+- Comprehensive Zod validation on all POST/PATCH endpoints
+- Proper HTTP status codes (200, 201, 400, 404, 500)
+- Automatic version snapshots before tile updates
+- Optimized queries (single query for getAllPhotos instead of N+1)
+- Error handling with descriptive messages
+
+### Storage Layer
+
+`DatabaseStorage` class in `server/storage.ts` implements the `IStorage` interface with:
+- Type-safe database operations using Drizzle ORM
+- Single-user mode support (userId nullable)
+- Automatic timestamp management (updatedAt set on updates)
+- Transaction support for data integrity
+- Efficient queries with proper indexing
+
+**Migration Strategy:**
+- Frontend continues using localStorage (legacy mode)
+- Backend API ready for frontend migration
+- Slugs preserve compatibility with localStorage tile IDs
+- `DEFAULT_TILES` and `DEFAULT_SETTINGS` exports maintain backward compatibility
