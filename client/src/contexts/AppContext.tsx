@@ -72,6 +72,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (storedTiles) {
       try {
         const parsedTiles = JSON.parse(storedTiles);
+        
         // Migrate old emoji icons to new icon names and add variant to special tiles
         const migratedTiles = parsedTiles.map((tile: LegacyTile) => {
           const updated = {
@@ -84,7 +85,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
           return updated;
         });
-        setTiles(migratedTiles);
+        
+        // Backfill any missing default tiles (e.g., todo-notes for existing users)
+        const existingIds = new Set(migratedTiles.map(t => t.id));
+        const missingTiles = DEFAULT_TILES.filter(defaultTile => !existingIds.has(defaultTile.id));
+        
+        if (missingTiles.length > 0) {
+          // Add missing tiles at the end, preserving their order values
+          const maxOrder = Math.max(...migratedTiles.map(t => t.order), -1);
+          const tilesWithMissing = [
+            ...migratedTiles,
+            ...missingTiles.map((tile, index) => ({
+              ...tile,
+              order: maxOrder + 1 + index,
+            }))
+          ];
+          setTiles(tilesWithMissing);
+        } else {
+          setTiles(migratedTiles);
+        }
       } catch (e) {
         console.error("Error parsing tiles:", e);
         setTiles(DEFAULT_TILES);
