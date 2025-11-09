@@ -11,18 +11,9 @@ interface TileCardProps {
 }
 
 export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
-  // Get text content from HTML for preview
-  const getPreviewText = (html: string) => {
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    const text = div.textContent || div.innerText || "";
-    return text.trim();
-  };
-
-  const previewText = getPreviewText(tile.content);
-  const lines = previewText.split("\n").filter(line => line.trim());
-  const preview = lines.slice(0, 3).join("\n") || "No content yet...";
-
+  // Show formatted HTML preview or fallback text
+  const hasContent = tile.content && tile.content.trim() !== "";
+  
   // Determine text color based on background color brightness
   const getTextColor = (hexColor: string) => {
     const rgb = parseInt(hexColor.slice(1), 16);
@@ -34,7 +25,11 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
   };
 
   const textColor = getTextColor(tile.color);
-  const timeAgo = formatDistanceToNow(new Date(tile.lastUpdated), { addSuffix: true });
+  // Support both localStorage (lastUpdated) and database (updatedAt/createdAt) formats
+  const timestamp = (tile as any).lastUpdated || tile.updatedAt || tile.createdAt;
+  const timeAgo = timestamp 
+    ? formatDistanceToNow(new Date(timestamp), { addSuffix: true })
+    : 'just now';
   const IconComponent = getIconComponent(tile.icon);
 
   return (
@@ -71,15 +66,23 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
       </div>
 
       {/* Content Preview */}
-      <div
-        className="flex-1 text-sm opacity-90 line-clamp-3 whitespace-pre-wrap mb-3"
-        style={{ color: textColor }}
-      >
-        {preview}
-      </div>
+      {hasContent ? (
+        <div
+          className="flex-1 text-sm opacity-90 line-clamp-3 mb-3 prose prose-sm max-w-none"
+          style={{ color: textColor }}
+          dangerouslySetInnerHTML={{ __html: tile.content }}
+        />
+      ) : (
+        <div
+          className="flex-1 text-sm opacity-90 line-clamp-3 mb-3 italic"
+          style={{ color: textColor }}
+        >
+          No content yet...
+        </div>
+      )}
 
       {/* Progress Bar (if exists) */}
-      {tile.progress !== undefined && tile.progress > 0 && (
+      {tile.progress !== null && tile.progress !== undefined && tile.progress > 0 && (
         <div className="mb-3">
           <div className="h-1 bg-black/20 dark:bg-white/20 rounded-full overflow-hidden">
             <div
