@@ -1,0 +1,162 @@
+Build a modern, responsive, single-page web app using **HTML, CSS, and JavaScript (vanilla or with lightweight libraries like Alpine.js or htmx if needed)** — no backend required. Use **localStorage** to persist data across sessions.
+
+### Core Concept:
+A **visual project management dashboard** for personal/client updates, styled like a mix of **Google Keep + Trello + Notion**, but as **interactive tiles on a dashboard**.
+
+---
+
+### Dashboard Layout:
+- Full-screen responsive grid of **clickable tiles** (like app icons).
+- Each tile represents a **category/tab**:
+Research | Charters | Vessels | Equipment | Operations | Methodology | Storyboard | Personal | Photos | + Add New
+- Tiles are **draggable** (optional: use Sortable.js or native drag-and-drop).
+- Clicking a tile **expands it into a full editor panel** (like a modal or slide-in) with:
+- A **rich text area** (use `contenteditable` or integrate **Quill.js** or **Tiptap** for formatting).
+- A **preview section below** showing the formatted content.
+- **Save** and **Close** buttons.
+- When collapsed, the tile shows a **truncated preview** (first 2–3 lines) of the content.
+
+---
+
+### Data & Persistence:
+- Each tile stores:
+```js
+{
+  id: "research",
+  title: "Research",
+  content: "<p>Latest findings...</p>",
+  lastUpdated: "2025-11-07 14:30",
+  color: "#4f46e5" // customizable
+}
+•  Save all tiles in localStorage as JSON. 
+•  Auto-save on blur or every 3 seconds.
+Here's a **ready-to-paste Replit prompt** you can use (e.g., with Replit's AI Agent, Ghostwriter, or to guide your own coding). It’s structured to generate a **fully functional, visual project management dashboard** with tile-based tabs, real-time editing, and expandable cool features.
+
+---
+
+### Replit Prompt (Copy & Paste This):
+
+```text
+Build a modern, responsive, single-page web app using **HTML, CSS, and JavaScript (vanilla or with lightweight libraries like Alpine.js or htmx if needed)** — no backend required. Use **localStorage** to persist data across sessions.
+
+### Core Concept:
+A **visual project management dashboard** for personal/client updates, styled like a mix of **Google Keep + Trello + Notion**, but as **interactive tiles on a dashboard**.
+
+---
+
+### Dashboard Layout:
+- Full-screen responsive grid of **clickable tiles** (like app icons).
+- Each tile represents a **category/tab**:
+  ```
+  Research | Charters | Vessels | Equipment | Operations | Methodology | Storyboard | Personal | Photos | + Add New
+  ```
+- Tiles are **draggable** (optional: use Sortable.js or native drag-and-drop).
+- Clicking a tile **expands it into a full editor panel** (like a modal or slide-in) with:
+  - A **rich text area** (use `contenteditable` or integrate **Quill.js** or **Tiptap** for formatting).
+  - A **preview section below** showing the formatted content.
+  - **Save** and **Close** buttons.
+- When collapsed, the tile shows a **truncated preview** (first 2–3 lines) of the content.
+
+---
+
+### Data & Persistence:
+- Each tile stores:
+  ```js
+  {
+    id: "research",
+    title: "Research",
+    content: "<p>Latest findings...</p>",
+    lastUpdated: "2025-11-07 14:30",
+    color: "#4f46e5" // customizable
+  }
+  ```
+- Save all tiles in `localStorage` as JSON.
+- Auto-save on blur or every 3 seconds.
+
+---
+
+### Cool Features to Add:
+1. **Tile Color Picker** – Right-click tile → change background color.
+2. **Progress Bars** – Add optional progress % to any tile (e.g., "Charters: 70%").
+3. **Photo Upload Tile**:
+   - Drag & drop images.
+   - Display as thumbnail grid.
+   - Click to enlarge (lightbox).
+   - Store as Base64 in localStorage.
+4. **Timeline View** (bonus tab):
+   - Show all updates chronologically with timestamps and tile names.
+5. **Search Bar** – Search across all tile content.
+6. **Export/Import** – Download all data as `.json`, import to restore.
+7. **Dark Mode Toggle** – Save preference.
+8. **+ Add New Tile** – Modal to create custom tile (name, icon, color).
+9. **Weather & Date Widget** (top-right corner) – live clock + optional location-based weather (use free API).
+10. **Quick Notes Floating Button** – Sticky "+ Note" button to add bullet to any tile instantly.
+
+---
+
+### UI/UX Requirements:
+- Clean, modern design (use Tailwind CSS via CDN or plain CSS).
+- Mobile-friendly (tiles stack on small screens).
+- Smooth animations (fade-in, slide-up on expand).
+- Favicon & title: "My Project OS"
+
+---
+
+### Tech Stack (CDN-based, no build tools):
+```html
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Optional: Quill.js for rich text -->
+<script src="https://cdn.quilljs.com/latest/quill.js"></script>
+<link href="https://cdn.quilljs.com/latest/quill.snow.css" rel="stylesheet">
+
+<!-- Optional: Sortable.js for drag-drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+<!-- Optional: Lightbox for photos -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/js/lightbox.min.js"></script>
+```
+
+---
+
+### Deliver:
+1. `index.html` – full working app.
+2. Inline CSS/JS or separate files.
+3. Instructions in comments on how to:
+   - Add new tiles
+   - Export data
+   - Reset everything
+
+Make it **beautiful, functional, and feel like a real product**. Add subtle hover effects, icons (use Heroicons or Font Awesome), and micro-interactions.
+
+---
+
+Goal: I can open this on any device, update my project live, show my client a professional dashboard, and never lose data.
+```
+
+---
+
+### Tips When Using This on Replit:
+1. Create a new **HTML/CSS/JS** Replit.
+2. Paste the prompt into **Replit’s AI (Ghostwriter)** or use it as your dev guide.
+3. Let it generate the full app — then tweak colors, add your logo, etc.
+4. Use **Replit’s "Always On"** + share the live link with your client.
+
+---
+
+### Example Tile (Visual Idea):
+```
+┌──────────────────┐
+│   🔬 Research     │
+│   ─────────────  │
+│   • Surveyed 12  │
+│     vessel types │
+│   • Contacted... │
+└──────────────────┘
+   ⏱ 2h ago
+```
+
+---
+
+Let me know if you want me to **generate the full working code** right now (I can output the complete `index.html` file).
