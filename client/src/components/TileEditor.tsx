@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Palette, Save } from "lucide-react";
+import { X, Palette, Save, Upload, Trash2, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useApp } from "@/contexts/AppContext";
-import { Tile } from "@shared/schema";
+import type { LegacyTile } from "@shared/schema";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { HexColorPicker } from "react-colorful";
 import { getIconComponent } from "@/lib/icons";
+import { useToast } from "@/hooks/use-toast";
 
 interface TileEditorProps {
   tileId: string;
@@ -18,8 +19,9 @@ interface TileEditorProps {
 }
 
 export function TileEditor({ tileId, onClose }: TileEditorProps) {
-  const { tiles, updateTile } = useApp();
+  const { tiles, updateTile, photos, addPhoto, deletePhoto } = useApp();
   const tile = tiles.find(t => t.id === tileId);
+  const { toast } = useToast();
   
   const [title, setTitle] = useState(tile?.title || "");
   const [content, setContent] = useState(tile?.content || "");
@@ -29,6 +31,10 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get photos for this tile
+  const tilePhotos = photos.filter(p => p.tileId === tileId);
 
   useEffect(() => {
     if (!tile) return;
@@ -62,7 +68,7 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
   const handleSave = () => {
     if (!tile) return;
     
-    const updates: Partial<Tile> = {
+    const updates: Partial<LegacyTile> = {
       title,
       content,
       color,
@@ -80,6 +86,111 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
     }
     handleSave();
     onClose();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Check file size (limit to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: `${file.name} is larger than 5MB`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      // Check if it's an image
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Invalid file type",
+          description: `${file.name} is not an image`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      try {
+        // Convert to base64
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64Data = event.target?.result as string;
+          
+          // Create thumbnail (resize to 200x200)
+          const thumbnail = await createThumbnail(base64Data);
+          
+          addPhoto({
+            tileId,
+            base64Data,
+            thumbnail,
+            caption: "",
+            timestamp: new Date().toISOString(),
+          });
+
+          toast({
+            title: "Photo uploaded",
+            description: `${file.name} has been added`,
+          });
+        };
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        toast({
+          title: "Upload failed",
+          description: `Could not upload ${file.name}`,
+          variant: "destructive",
+        });
+      }
+    }
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const createThumbnail = (base64Data: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = base64Data;
+    });
+  };
+
+  const handleDeletePhoto = (photoId: string) => {
+    deletePhoto(photoId);
+    toast({
+      title: "Photo deleted",
+      description: "Photo has been removed from this tile",
+    });
   };
 
   if (!tile) return null;
@@ -236,15 +347,78 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
         </div>
 
         {/* Editor */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           <ReactQuill
             theme="snow"
             value={content}
             onChange={setContent}
             modules={modules}
-            className="h-full"
+            className="h-[400px]"
             placeholder="Start writing..."
           />
+          
+          {/* Photos Section */}
+          <div className="p-6 border-t bg-muted/20">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5" />
+                <h3 className="font-semibold">Photos & Files</h3>
+                <span className="text-sm text-muted-foreground">({tilePhotos.length})</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-upload-photo"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileUpload}
+                className="hidden"
+                data-testid="input-file-upload"
+              />
+            </div>
+
+            {tilePhotos.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {tilePhotos.map(photo => (
+                  <div
+                    key={photo.id}
+                    className="relative group aspect-square rounded-lg overflow-hidden border bg-card hover:shadow-lg transition-shadow"
+                    data-testid={`photo-${photo.id}`}
+                  >
+                    <img
+                      src={photo.thumbnail}
+                      alt={photo.caption || "Photo"}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        onClick={() => handleDeletePhoto(photo.id)}
+                        data-testid={`button-delete-photo-${photo.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                <p>No photos yet</p>
+                <p className="text-sm">Click Upload to add photos to this tile</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}

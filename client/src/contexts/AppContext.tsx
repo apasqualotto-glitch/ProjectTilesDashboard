@@ -1,15 +1,15 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { Tile, Photo, Settings, DEFAULT_TILES, DEFAULT_SETTINGS } from "@shared/schema";
+import { DEFAULT_TILES, DEFAULT_SETTINGS, type LegacyTile, type LegacyPhoto, type LegacySettings } from "@shared/schema";
 
 interface AppContextType {
-  tiles: Tile[];
-  photos: Photo[];
-  settings: Settings;
+  tiles: LegacyTile[];
+  photos: LegacyPhoto[];
+  settings: LegacySettings;
   darkMode: boolean;
-  updateTile: (id: string, updates: Partial<Tile>) => void;
-  addTile: (tile: Omit<Tile, "id" | "order">) => void;
+  updateTile: (id: string, updates: Partial<LegacyTile>) => void;
+  addTile: (tile: Omit<LegacyTile, "id" | "order">) => void;
   deleteTile: (id: string) => void;
-  addPhoto: (photo: Omit<Photo, "id">) => void;
+  addPhoto: (photo: Omit<LegacyPhoto, "id">) => void;
   deletePhoto: (id: string) => void;
   toggleDarkMode: () => void;
   reorderTiles: (newOrder: string[]) => void;
@@ -58,9 +58,9 @@ function migrateEmojiToIcon(icon: string): string {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [tiles, setTiles] = useState<Tile[]>([]);
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [tiles, setTiles] = useState<LegacyTile[]>([]);
+  const [photos, setPhotos] = useState<LegacyPhoto[]>([]);
+  const [settings, setSettings] = useState<LegacySettings>(DEFAULT_SETTINGS);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load data from localStorage on mount
@@ -132,7 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   }, [settings, isInitialized]);
 
-  const updateTile = (id: string, updates: Partial<Tile>) => {
+  const updateTile = (id: string, updates: Partial<LegacyTile>) => {
     setTiles(prev =>
       prev.map(tile =>
         tile.id === id
@@ -142,8 +142,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const addTile = (tileData: Omit<Tile, "id" | "order">) => {
-    const newTile: Tile = {
+  const addTile = (tileData: Omit<LegacyTile, "id" | "order">) => {
+    const newTile: LegacyTile = {
       ...tileData,
       id: `tile_${Date.now()}`,
       order: tiles.length,
@@ -164,8 +164,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   };
 
-  const addPhoto = (photoData: Omit<Photo, "id">) => {
-    const newPhoto: Photo = {
+  const addPhoto = (photoData: Omit<LegacyPhoto, "id">) => {
+    const newPhoto: LegacyPhoto = {
       ...photoData,
       id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     };

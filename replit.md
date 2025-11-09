@@ -39,9 +39,10 @@ Preferred communication style: Simple, everyday language.
 **Responsive Grid**: CSS Grid layout that adapts from 2 columns (mobile) to 3 columns (tablet) to 5 columns (desktop) to accommodate the tile-based interface.
 
 **Component Patterns**:
-- **Tile Cards**: Aspect-ratio squares with customizable background colors, icon, title, content preview, and timestamp
-- **Tile Editor**: Full-screen modal (or slide-in panel) with split view - Quill editor on top, live preview below
-- **Progressive Disclosure**: Collapsed tiles show 2-3 line previews; expanded tiles reveal full editing capabilities
+- **Tile Cards**: Aspect-ratio squares with customizable background colors, icon, title, formatted content preview (showing bullet points, bold text, etc.), and timestamp
+- **Tile Editor**: Full-screen modal with rich text editor and photo upload section (preview section removed for cleaner editing)
+- **Progressive Disclosure**: Collapsed tiles show formatted content previews; expanded tiles reveal full editing and photo management
+- **Photo Gallery**: Responsive grid within tile editor showing uploaded photo thumbnails with hover delete overlay
 
 ### Data Schema
 
@@ -71,8 +72,14 @@ Preferred communication style: Simple, everyday language.
 ### Key Features
 
 1. **Tile Dashboard**: Grid of interactive category tiles with customizable colors and icons
-2. **Rich Text Editor**: Quill-based editor with auto-save (debounced to 3 seconds)
-3. **Photo Management**: Upload, view (lightbox), and delete photos associated with tiles
+2. **Rich Text Editor**: Quill-based editor with auto-save (debounced to 3 seconds) without split-view preview
+3. **Photo Management**: Upload, view, and delete photos within each tile editor
+   - Multi-file upload support with drag-drop file input
+   - 5MB file size limit with validation
+   - Auto-generated thumbnails (200x200 max) for efficient display
+   - Responsive photo grid (2-4 columns)
+   - Hover overlay with delete button
+   - Toast notifications for upload/delete feedback
 4. **Quick Notes**: Floating action button for rapid note-taking that appends to selected tiles
 5. **Timeline View**: Chronological activity view showing updates across all tiles
 6. **Import/Export**: JSON-based data portability for backup and migration
@@ -125,6 +132,24 @@ Preferred communication style: Simple, everyday language.
 - **Drizzle ORM**: Database toolkit for type-safe PostgreSQL queries
 - **@neondatabase/serverless**: Neon PostgreSQL driver for serverless deployment
 - **Zod**: Request validation for all API inputs
+
+### Recent Changes (November 2025)
+
+**Photo Upload Feature Implementation**:
+- Added `LegacyPhoto` type in shared/schema.ts for localStorage compatibility (string IDs)
+- Updated AppContext to use LegacyPhoto throughout for photo state management
+- Implemented photo upload UI in TileEditor component with:
+  - Multi-file upload with 5MB size limit and image type validation
+  - Client-side thumbnail generation (200x200 max)
+  - Responsive photo grid (2-4 columns) with hover delete overlay
+  - Toast notifications for upload/delete feedback
+- Photos stored in localStorage as base64 with auto-generated thumbnails
+- E2E tests passing for photo upload, display, and deletion workflows
+
+**Type Migration Strategy**:
+- Frontend uses LegacyTile, LegacyPhoto, LegacySettings for localStorage (string IDs)
+- Backend uses database types (Tile, Photo, Settings) with numeric IDs
+- This dual-type approach enables gradual migration without breaking existing functionality
 
 ## Backend Architecture (November 2025)
 

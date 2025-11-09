@@ -327,6 +327,15 @@ export type LegacySettings = {
   lastBackup?: string;
 };
 
+export type LegacyPhoto = {
+  id: string;
+  tileId: string;
+  base64Data: string;
+  thumbnail: string;
+  caption?: string;
+  timestamp: string;
+};
+
 // Convert seed data to legacy format for frontend
 export const DEFAULT_TILES = DEFAULT_TILE_SLUGS.map((slug, index) => {
   const seed = DEFAULT_TILES_SEED[index];
