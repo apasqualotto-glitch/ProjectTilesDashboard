@@ -1,13 +1,16 @@
 import { formatDistanceToNow } from "date-fns";
 import { Tile } from "@shared/schema";
 import { getIconComponent } from "@/lib/icons";
+import { GripVertical } from "lucide-react";
+import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 
 interface TileCardProps {
   tile: Tile;
   onClick: () => void;
+  dragListeners?: DraggableSyntheticListeners;
 }
 
-export function TileCard({ tile, onClick }: TileCardProps) {
+export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
   // Get text content from HTML for preview
   const getPreviewText = (html: string) => {
     const div = document.createElement("div");
@@ -51,6 +54,20 @@ export function TileCard({ tile, onClick }: TileCardProps) {
         <h3 className="text-lg font-semibold leading-tight flex-1">
           {tile.title}
         </h3>
+        {/* Drag Handle */}
+        {dragListeners && (
+          <div
+            className="opacity-40 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing focus:outline-none focus:opacity-100"
+            {...dragListeners}
+            aria-label="Drag to reorder tile"
+            data-testid={`drag-handle-${tile.id}`}
+            onClick={(e) => e.stopPropagation()}
+            tabIndex={0}
+            role="button"
+          >
+            <GripVertical className="w-5 h-5" style={{ color: textColor }} />
+          </div>
+        )}
       </div>
 
       {/* Content Preview */}

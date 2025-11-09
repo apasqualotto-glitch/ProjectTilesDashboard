@@ -42,8 +42,8 @@ function SortableTile({ tile, onClick }: { tile: any; onClick: () => void }) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <TileCard tile={tile} onClick={onClick} />
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <TileCard tile={tile} onClick={onClick} dragListeners={listeners} />
     </div>
   );
 }
