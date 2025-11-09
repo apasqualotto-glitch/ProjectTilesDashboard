@@ -18,18 +18,79 @@ export function WeatherWidget() {
     return () => clearInterval(timer);
   }, []);
 
-  // Get weather (optional - using mock data since we don't want to require API keys)
+  // Get weather using Open-Meteo API (no API key required)
   useEffect(() => {
-    // In a real app, you would fetch from OpenWeatherMap API:
-    // fetch(`https://api.openweathermap.org/data/2.5/weather?q=city&appid=${API_KEY}`)
-    
-    // For now, use mock weather data
-    const mockWeather = {
-      temp: Math.floor(Math.random() * 20) + 60, // 60-80°F
-      condition: ["sunny", "cloudy", "rainy"][Math.floor(Math.random() * 3)],
-      city: "Local",
+    const fetchWeatherByCoords = async (lat: number, lon: number, cityLabel: string) => {
+      try {
+        const response = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=fahrenheit`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`API responded with ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.current_weather) {
+          const temp = Math.round(data.current_weather.temperature);
+          const weatherCode = data.current_weather.weathercode;
+          
+          // Map weather codes to conditions
+          let condition = "clear";
+          if (weatherCode === 0) condition = "sunny";
+          else if ([1, 2, 3].includes(weatherCode)) condition = "cloudy";
+          else if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(weatherCode)) condition = "rainy";
+          else if ([71, 73, 75, 77, 85, 86].includes(weatherCode)) condition = "snowy";
+          
+          setWeather({
+            temp,
+            condition,
+            city: cityLabel,
+          });
+        } else {
+          // API response missing weather data - use fallback
+          setWeather({
+            temp: 70,
+            condition: "sunny",
+            city: cityLabel,
+          });
+        }
+      } catch (error) {
+        console.error("Weather API fetch failed:", error);
+        // Set fallback weather data so widget always shows something
+        setWeather({
+          temp: 70,
+          condition: "sunny",
+          city: cityLabel,
+        });
+      }
     };
-    setWeather(mockWeather);
+
+    const fetchWeather = async () => {
+      try {
+        // Try to get user's location
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              const { latitude, longitude } = position.coords;
+              await fetchWeatherByCoords(latitude, longitude, "Local");
+            },
+            () => {
+              // Geolocation denied - use default location (San Francisco)
+              fetchWeatherByCoords(37.77, -122.41, "SF");
+            }
+          );
+        } else {
+          // No geolocation support - use default location
+          await fetchWeatherByCoords(37.77, -122.41, "SF");
+        }
+      } catch (error) {
+        console.error("Weather fetch failed:", error);
+      }
+    };
+    
+    fetchWeather();
   }, []);
 
   const formatTime = (date: Date) => {
@@ -76,11 +137,12 @@ export function WeatherWidget() {
         {formatTime(currentTime)}
       </div>
 
-      {/* Weather (optional) */}
+      {/* Weather */}
       {weather && (
         <div className="flex items-center gap-2 text-muted-foreground">
           {getWeatherIcon(weather.condition)}
           <span>{weather.temp}°F</span>
+          {weather.city && <span className="text-xs opacity-75">({weather.city})</span>}
         </div>
       )}
     </div>
