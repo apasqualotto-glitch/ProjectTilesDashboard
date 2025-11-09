@@ -72,11 +72,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (storedTiles) {
       try {
         const parsedTiles = JSON.parse(storedTiles);
-        // Migrate old emoji icons to new icon names
-        const migratedTiles = parsedTiles.map((tile: Tile) => ({
-          ...tile,
-          icon: migrateEmojiToIcon(tile.icon),
-        }));
+        // Migrate old emoji icons to new icon names and add variant to special tiles
+        const migratedTiles = parsedTiles.map((tile: LegacyTile) => {
+          const updated = {
+            ...tile,
+            icon: migrateEmojiToIcon(tile.icon),
+          };
+          // Ensure todo-notes tile has the large variant
+          if (tile.id === "todo-notes" && !tile.variant) {
+            updated.variant = "large";
+          }
+          return updated;
+        });
         setTiles(migratedTiles);
       } catch (e) {
         console.error("Error parsing tiles:", e);
@@ -188,16 +195,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const reorderTiles = (newOrder: string[]) => {
-    setSettings(prev => ({ ...prev, tileOrder: newOrder }));
+  const reorderTiles = (reorderedSubsetIds: string[]) => {
     setTiles(prev => {
-      const reordered = [...prev];
-      reordered.sort((a, b) => {
-        const aIndex = newOrder.indexOf(a.id);
-        const bIndex = newOrder.indexOf(b.id);
-        return aIndex - bIndex;
-      });
-      return reordered.map((tile, index) => ({ ...tile, order: index }));
+      // Get all tiles sorted by current order
+      const sortedByOrder = [...prev].sort((a, b) => a.order - b.order);
+      const allRegularTiles = sortedByOrder.filter(t => t.variant !== "large");
+      const largeTiles = sortedByOrder.filter(t => t.variant === "large");
+      
+      // Create a map of tile IDs to tile objects for quick lookup
+      const tileMap = new Map(allRegularTiles.map(t => [t.id, t]));
+      
+      // Build new regular order by walking the original array
+      // and replacing only the tiles that appear in reorderedSubsetIds
+      const newRegularOrder: typeof allRegularTiles = [];
+      let reorderedIndex = 0; // Index into reorderedSubsetIds array
+      
+      for (const tile of allRegularTiles) {
+        if (reorderedSubsetIds.includes(tile.id) && reorderedIndex < reorderedSubsetIds.length) {
+          // This tile is being reordered - use the next tile from reorderedSubsetIds
+          const nextReorderedId = reorderedSubsetIds[reorderedIndex];
+          newRegularOrder.push({ ...tileMap.get(nextReorderedId)! }); // Clone to avoid ref issues
+          reorderedIndex++;
+        } else {
+          // This tile is not being reordered - keep it in place
+          newRegularOrder.push({ ...tile }); // Clone to avoid ref issues
+        }
+      }
+      
+      // Assign sequential order values
+      const reindexedRegular = newRegularOrder.map((tile, index) => ({
+        ...tile,
+        order: index,
+      }));
+      
+      // Append large tiles with higher order values
+      const reindexedLarge = largeTiles.map((tile, index) => ({
+        ...tile,
+        order: reindexedRegular.length + index,
+      }));
+      
+      const combined = [...reindexedRegular, ...reindexedLarge];
+      
+      // Persist
+      const fullOrder = combined.map(t => t.id);
+      setSettings(prev => ({ ...prev, tileOrder: fullOrder }));
+      
+      return combined;
     });
   };
 
@@ -224,12 +267,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const data = JSON.parse(jsonString);
       
-      // Migrate tiles to ensure no emoji icons
+      // Migrate tiles to ensure no emoji icons and add variant to special tiles
       if (data.tiles) {
-        const migratedTiles = data.tiles.map((tile: Tile) => ({
-          ...tile,
-          icon: migrateEmojiToIcon(tile.icon),
-        }));
+        const migratedTiles = data.tiles.map((tile: LegacyTile) => {
+          const updated = {
+            ...tile,
+            icon: migrateEmojiToIcon(tile.icon),
+          };
+          // Ensure todo-notes tile has the large variant
+          if (tile.id === "todo-notes" && !tile.variant) {
+            updated.variant = "large";
+          }
+          return updated;
+        });
         setTiles(migratedTiles);
       }
       

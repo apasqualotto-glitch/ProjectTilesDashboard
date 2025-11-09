@@ -212,7 +212,7 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
     toolbar: [
       [{ header: [1, 2, 3, false] }],
       ["bold", "italic", "underline", "strike"],
-      [{ list: "ordered" }, { list: "bullet" }],
+      [{ list: "ordered" }, { list: "bullet" }, { list: "check" }],
       ["blockquote", "code-block"],
       ["link"],
       ["clean"],

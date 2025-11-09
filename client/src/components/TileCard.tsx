@@ -1,11 +1,11 @@
 import { formatDistanceToNow } from "date-fns";
-import { Tile } from "@shared/schema";
+import type { LegacyTile } from "@shared/schema";
 import { getIconComponent } from "@/lib/icons";
 import { GripVertical } from "lucide-react";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 
 interface TileCardProps {
-  tile: Tile;
+  tile: LegacyTile;
   onClick: () => void;
   dragListeners?: DraggableSyntheticListeners;
 }
@@ -13,6 +13,7 @@ interface TileCardProps {
 export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
   // Show formatted HTML preview or fallback text
   const hasContent = tile.content && tile.content.trim() !== "";
+  const isLargeTile = tile.variant === "large";
   
   // Determine text color based on background color brightness
   const getTextColor = (hexColor: string) => {
@@ -25,8 +26,7 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
   };
 
   const textColor = getTextColor(tile.color);
-  // Support both localStorage (lastUpdated) and database (updatedAt/createdAt) formats
-  const timestamp = (tile as any).lastUpdated || tile.updatedAt || tile.createdAt;
+  const timestamp = tile.lastUpdated;
   const timeAgo = timestamp 
     ? formatDistanceToNow(new Date(timestamp), { addSuffix: true })
     : 'just now';
@@ -35,13 +35,16 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
   return (
     <button
       onClick={onClick}
-      className="relative flex flex-col min-h-[180px] p-6 rounded-lg border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 text-left w-full"
+      className={`relative flex flex-col p-6 rounded-lg border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 text-left w-full ${
+        isLargeTile ? "min-h-[400px]" : "min-h-[180px]"
+      }`}
       style={{
         backgroundColor: tile.color,
         color: textColor,
         borderColor: `${tile.color}dd`,
       }}
       data-testid={`tile-${tile.id}`}
+      data-variant={isLargeTile ? "large" : "regular"}
     >
       {/* Icon and Title */}
       <div className="flex items-start gap-3 mb-3">
@@ -68,13 +71,17 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
       {/* Content Preview */}
       {hasContent ? (
         <div
-          className="flex-1 text-sm opacity-90 line-clamp-3 mb-3 prose prose-sm max-w-none"
+          className={`flex-1 text-sm opacity-90 mb-3 prose prose-sm max-w-none ${
+            isLargeTile ? "line-clamp-[16]" : "line-clamp-3"
+          }`}
           style={{ color: textColor }}
           dangerouslySetInnerHTML={{ __html: tile.content }}
         />
       ) : (
         <div
-          className="flex-1 text-sm opacity-90 line-clamp-3 mb-3 italic"
+          className={`flex-1 text-sm opacity-90 mb-3 italic ${
+            isLargeTile ? "line-clamp-[16]" : "line-clamp-3"
+          }`}
           style={{ color: textColor }}
         >
           No content yet...

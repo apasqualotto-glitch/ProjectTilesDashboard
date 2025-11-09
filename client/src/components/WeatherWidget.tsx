@@ -4,10 +4,14 @@ import { Cloud, Sun, CloudRain, Snowflake, Wind, Calendar } from "lucide-react";
 export function WeatherWidget() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [weather, setWeather] = useState<{
-    temp?: number;
-    condition?: string;
-    city?: string;
-  } | null>(null);
+    temp: number;
+    condition: string;
+    city: string;
+  }>({
+    temp: 21, // Default fallback temperature in Celsius
+    condition: "sunny",
+    city: "Local",
+  });
 
   // Update time every second
   useEffect(() => {
@@ -23,7 +27,7 @@ export function WeatherWidget() {
     const fetchWeatherByCoords = async (lat: number, lon: number, cityLabel: string) => {
       try {
         const response = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=fahrenheit`
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=celsius`
         );
         
         if (!response.ok) {
@@ -51,7 +55,7 @@ export function WeatherWidget() {
         } else {
           // API response missing weather data - use fallback
           setWeather({
-            temp: 70,
+            temp: 21, // Realistic Celsius fallback (~70°F)
             condition: "sunny",
             city: cityLabel,
           });
@@ -60,7 +64,7 @@ export function WeatherWidget() {
         console.error("Weather API fetch failed:", error);
         // Set fallback weather data so widget always shows something
         setWeather({
-          temp: 70,
+          temp: 21, // Realistic Celsius fallback (~70°F)
           condition: "sunny",
           city: cityLabel,
         });
@@ -138,13 +142,11 @@ export function WeatherWidget() {
       </div>
 
       {/* Weather */}
-      {weather && (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {getWeatherIcon(weather.condition)}
-          <span>{weather.temp}°F</span>
-          {weather.city && <span className="text-xs opacity-75">({weather.city})</span>}
-        </div>
-      )}
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {getWeatherIcon(weather.condition)}
+        <span>{weather.temp}°C</span>
+        <span className="text-xs opacity-75">({weather.city})</span>
+      </div>
     </div>
   );
 }

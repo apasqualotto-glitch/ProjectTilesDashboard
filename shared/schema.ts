@@ -50,6 +50,7 @@ export type LegacyTile = {
   order: number;
   template?: string;
   templateData?: any;
+  variant?: "large"; // Special variant for large tiles (3x2 grid)
 };
 
 // Photos table
@@ -231,7 +232,7 @@ export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => 
 // ============================================
 
 // Default tile slugs in order
-export const DEFAULT_TILE_SLUGS = ["research", "charters", "vessels", "equipment", "operations", "methodology", "storyboard", "personal", "photos"];
+export const DEFAULT_TILE_SLUGS = ["research", "charters", "vessels", "equipment", "operations", "methodology", "storyboard", "personal", "photos", "todo-notes"];
 
 // Default tiles seed data (for database initialization)
 export const DEFAULT_TILES_SEED: InsertTile[] = [
@@ -307,6 +308,14 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     icon: "camera",
     order: 8,
   },
+  {
+    slug: "todo-notes",
+    title: "Todo List & Notes",
+    content: "",
+    color: "#6366f1", // indigo
+    icon: "list-checks",
+    order: 9,
+  },
 ];
 
 // Default settings seed data
@@ -339,16 +348,23 @@ export type LegacyPhoto = {
 // Convert seed data to legacy format for frontend
 export const DEFAULT_TILES = DEFAULT_TILE_SLUGS.map((slug, index) => {
   const seed = DEFAULT_TILES_SEED[index];
-  return {
+  const tile: LegacyTile = {
     id: slug,
     title: seed.title,
     content: seed.content || "",
     lastUpdated: new Date().toISOString(),
     color: seed.color || "#4f46e5",
     icon: seed.icon || "folder-open",
-    order: seed.order,
-    progress: seed.progress,
+    order: seed.order ?? index,
+    progress: seed.progress ?? undefined,
   };
+  
+  // Mark the special large tile
+  if (slug === "todo-notes") {
+    tile.variant = "large";
+  }
+  
+  return tile;
 });
 
 export const DEFAULT_SETTINGS: LegacySettings = {

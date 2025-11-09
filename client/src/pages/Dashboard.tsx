@@ -63,8 +63,15 @@ export default function Dashboard() {
     })
   );
 
-  // Filter tiles based on search query
-  const filteredTiles = tiles.filter(tile => {
+  // Sort all tiles by order first
+  const sortedAllTiles = [...tiles].sort((a, b) => a.order - b.order);
+  
+  // Separate ALL regular and large tiles (unfiltered - for drag operations)
+  const allRegularTiles = sortedAllTiles.filter(tile => tile.variant !== "large");
+  const allLargeTiles = sortedAllTiles.filter(tile => tile.variant === "large");
+  
+  // Filter tiles based on search query (for display)
+  const filteredTiles = sortedAllTiles.filter(tile => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     const titleMatch = tile.title.toLowerCase().includes(query);
@@ -78,17 +85,20 @@ export default function Dashboard() {
     return titleMatch || contentMatch;
   });
 
-  // Sort tiles by order
-  const sortedTiles = [...filteredTiles].sort((a, b) => a.order - b.order);
+  // Separate filtered tiles for display
+  const displayRegularTiles = filteredTiles.filter(tile => tile.variant !== "large");
+  const displayLargeTiles = filteredTiles.filter(tile => tile.variant === "large");
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = sortedTiles.findIndex(t => t.id === active.id);
-      const newIndex = sortedTiles.findIndex(t => t.id === over.id);
+      // Reorder only the visible/filtered tiles
+      const oldIndex = displayRegularTiles.findIndex(t => t.id === active.id);
+      const newIndex = displayRegularTiles.findIndex(t => t.id === over.id);
       
-      const newOrder = arrayMove(sortedTiles, oldIndex, newIndex);
+      const newOrder = arrayMove(displayRegularTiles, oldIndex, newIndex);
+      // Pass only the reordered visible tiles
       reorderTiles(newOrder.map(t => t.id));
     }
   };
@@ -129,18 +139,18 @@ export default function Dashboard() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Tiles Grid with Drag & Drop */}
+        {/* Regular Tiles Grid with Drag & Drop */}
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={sortedTiles.map(t => t.id)}
+            items={displayRegularTiles.map(t => t.id)}
             strategy={rectSortingStrategy}
           >
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
-              {sortedTiles.map(tile => (
+              {displayRegularTiles.map(tile => (
                 <SortableTile
                   key={tile.id}
                   tile={tile}
@@ -151,9 +161,27 @@ export default function Dashboard() {
             </div>
           </SortableContext>
         </DndContext>
+        
+        {/* Large Tiles Section (3x2 grid spaces) */}
+        {displayLargeTiles.length > 0 && (
+          <div className="mt-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+              {displayLargeTiles.map(tile => (
+                <div
+                  key={tile.id}
+                  className="sm:col-span-2 lg:col-span-3"
+                  style={{ minHeight: "400px" }}
+                  data-testid={`large-tile-${tile.id}`}
+                >
+                  <TileCard tile={tile} onClick={() => handleTileClick(tile.id)} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Empty State */}
-        {sortedTiles.length === 0 && searchQuery && (
+        {filteredTiles.length === 0 && searchQuery && (
           <div className="text-center py-12">
             <p className="text-muted-foreground text-lg">
               No tiles found for "{searchQuery}"
