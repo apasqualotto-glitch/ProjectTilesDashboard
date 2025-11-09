@@ -1,126 +1,316 @@
 import { z } from "zod";
+import { pgTable, serial, varchar, text, timestamp, integer, boolean, json } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
+import { relations } from "drizzle-orm";
 
-// Tile schema for project management categories
-export const tileSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  content: z.string(), // HTML content from rich text editor
-  lastUpdated: z.string(), // ISO timestamp
-  color: z.string(), // hex color
-  icon: z.string(), // emoji or icon name
-  progress: z.number().min(0).max(100).optional(), // optional progress percentage
-  order: z.number(), // for drag-drop ordering
-});
+// ============================================
+// DRIZZLE ORM DATABASE TABLES
+// ============================================
 
-export type Tile = z.infer<typeof tileSchema>;
+// Tiles table
+// Note: updatedAt is managed in application layer (storage.ts) - set manually on updates
+export const tiles = pgTable("tiles", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(), // Stable string identifier (e.g., "research", "photos")
+  userId: varchar("user_id", { length: 255 }), // Nullable for single-user mode, enforced in future multi-user
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").default("").notNull(),
+  color: varchar("color", { length: 7 }).default("#4f46e5").notNull(),
+  icon: varchar("icon", { length: 50 }).default("folder-open").notNull(),
+  progress: integer("progress").default(0),
+  order: integer("order").default(0).notNull(),
+  template: varchar("template", { length: 50 }), // 'kanban', 'checklist', 'table', null for default
+  templateData: json("template_data"), // template-specific data structure
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(), // Updated manually in storage layer
+}, (table) => ({
+  slugIdx: {
+    columns: [table.slug],
+    unique: true,
+  },
+  userIdIdx: {
+    columns: [table.userId],
+  },
+}));
 
-// Photo schema for the Photos tile
-export const photoSchema = z.object({
-  id: z.string(),
-  tileId: z.string(), // which tile this photo belongs to (usually "photos")
-  base64Data: z.string(), // Base64 encoded image
-  thumbnail: z.string(), // Base64 encoded thumbnail
-  timestamp: z.string(), // ISO timestamp
-  caption: z.string().optional(),
-});
+export type Tile = typeof tiles.$inferSelect;
+export type InsertTile = typeof tiles.$inferInsert;
+export const insertTileSchema = createInsertSchema(tiles).omit({ id: true, createdAt: true, updatedAt: true });
+export const selectTileSchema = createSelectSchema(tiles);
 
-export type Photo = z.infer<typeof photoSchema>;
+// Compatibility type for legacy localStorage data
+export type LegacyTile = {
+  id: string; // legacy string ID (maps to slug)
+  title: string;
+  content: string;
+  lastUpdated: string;
+  color: string;
+  icon: string;
+  progress?: number;
+  order: number;
+  template?: string;
+  templateData?: any;
+};
 
-// App settings
-export const settingsSchema = z.object({
-  darkMode: z.boolean(),
-  tileOrder: z.array(z.string()), // array of tile IDs in display order
-  lastBackup: z.string().optional(),
-});
+// Photos table
+export const photos = pgTable("photos", {
+  id: serial("id").primaryKey(),
+  tileId: integer("tile_id").references(() => tiles.id, { onDelete: "cascade" }).notNull(),
+  base64Data: text("base64_data").notNull(),
+  thumbnail: text("thumbnail").notNull(),
+  caption: varchar("caption", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tileIdIdx: {
+    columns: [table.tileId],
+  },
+}));
 
-export type Settings = z.infer<typeof settingsSchema>;
+export type Photo = typeof photos.$inferSelect;
+export type InsertPhoto = typeof photos.$inferInsert;
+export const insertPhotoSchema = createInsertSchema(photos).omit({ id: true, createdAt: true });
 
-// Default tiles configuration
-export const DEFAULT_TILES: Tile[] = [
+// Settings table
+// Single-user mode: userId is null. Multi-user: userId required and unique
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 255 }), // Nullable for single-user mode (localStorage migration)
+  darkMode: boolean("dark_mode").default(false).notNull(),
+  tileOrder: json("tile_order").$type<string[]>().default([]).notNull(), // Array of tile slugs
+  lastBackup: timestamp("last_backup"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(), // Updated manually in storage layer
+}, (table) => ({
+  userIdIdx: {
+    columns: [table.userId],
+    unique: true, // One settings row per user (null allowed for single-user)
+  },
+}));
+
+export type Settings = typeof settings.$inferSelect;
+export type InsertSettings = typeof settings.$inferInsert;
+
+// Tile Versions table (for version history feature)
+// Stores complete snapshots of tile state for restore capability
+export const tileVersions = pgTable("tile_versions", {
+  id: serial("id").primaryKey(),
+  tileId: integer("tile_id").references(() => tiles.id, { onDelete: "cascade" }).notNull(),
+  slug: varchar("slug", { length: 100 }).notNull(), // Copy of tile slug for reference
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  color: varchar("color", { length: 7 }).notNull(),
+  icon: varchar("icon", { length: 50 }).notNull(),
+  progress: integer("progress").default(0),
+  order: integer("order").default(0).notNull(),
+  template: varchar("template", { length: 50 }),
+  templateData: json("template_data"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tileIdIdx: {
+    columns: [table.tileId],
+  },
+  createdAtIdx: {
+    columns: [table.createdAt],
+  },
+}));
+
+export type TileVersion = typeof tileVersions.$inferSelect;
+export type InsertTileVersion = typeof tileVersions.$inferInsert;
+
+// Shared Links table (for collaborative sharing feature)
+export const sharedLinks = pgTable("shared_links", {
+  id: serial("id").primaryKey(),
+  tileId: integer("tile_id").references(() => tiles.id, { onDelete: "cascade" }).notNull(),
+  shareToken: varchar("share_token", { length: 255 }).notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => ({
+  tileIdIdx: {
+    columns: [table.tileId],
+  },
+  shareTokenIdx: {
+    columns: [table.shareToken],
+    unique: true,
+  },
+}));
+
+export type SharedLink = typeof sharedLinks.$inferSelect;
+export type InsertSharedLink = typeof sharedLinks.$inferInsert;
+
+// Reminders table (for notifications feature)
+export const reminders = pgTable("reminders", {
+  id: serial("id").primaryKey(),
+  tileId: integer("tile_id").references(() => tiles.id, { onDelete: "cascade" }).notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  recurring: varchar("recurring", { length: 50 }), // 'daily', 'weekly', 'monthly', null
+  notified: boolean("notified").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tileIdIdx: {
+    columns: [table.tileId],
+  },
+  dueDateIdx: {
+    columns: [table.dueDate],
+  },
+}));
+
+export type Reminder = typeof reminders.$inferSelect;
+export type InsertReminder = typeof reminders.$inferInsert;
+
+// Analytics Events table (for usage tracking)
+export const analyticsEvents = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  tileId: integer("tile_id").references(() => tiles.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // 'open', 'edit', 'close'
+  duration: integer("duration"), // time spent in seconds (for 'close' events)
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tileIdIdx: {
+    columns: [table.tileId],
+  },
+  eventTypeIdx: {
+    columns: [table.eventType],
+  },
+  createdAtIdx: {
+    columns: [table.createdAt],
+  },
+}));
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = typeof analyticsEvents.$inferInsert;
+
+// ============================================
+// DRIZZLE ORM RELATIONS
+// ============================================
+
+export const tilesRelations = relations(tiles, ({ many }) => ({
+  photos: many(photos),
+  versions: many(tileVersions),
+  sharedLinks: many(sharedLinks),
+  reminders: many(reminders),
+  analyticsEvents: many(analyticsEvents),
+}));
+
+export const photosRelations = relations(photos, ({ one }) => ({
+  tile: one(tiles, {
+    fields: [photos.tileId],
+    references: [tiles.id],
+  }),
+}));
+
+export const tileVersionsRelations = relations(tileVersions, ({ one }) => ({
+  tile: one(tiles, {
+    fields: [tileVersions.tileId],
+    references: [tiles.id],
+  }),
+}));
+
+export const sharedLinksRelations = relations(sharedLinks, ({ one }) => ({
+  tile: one(tiles, {
+    fields: [sharedLinks.tileId],
+    references: [tiles.id],
+  }),
+}));
+
+export const remindersRelations = relations(reminders, ({ one }) => ({
+  tile: one(tiles, {
+    fields: [reminders.tileId],
+    references: [tiles.id],
+  }),
+}));
+
+export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => ({
+  tile: one(tiles, {
+    fields: [analyticsEvents.tileId],
+    references: [tiles.id],
+  }),
+}));
+
+// ============================================
+// DEFAULT SEED DATA
+// ============================================
+
+// Default tile slugs in order
+export const DEFAULT_TILE_SLUGS = ["research", "charters", "vessels", "equipment", "operations", "methodology", "storyboard", "personal", "photos"];
+
+// Default tiles seed data (for database initialization)
+export const DEFAULT_TILES_SEED: InsertTile[] = [
   {
-    id: "research",
+    slug: "research",
     title: "Research",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#4f46e5", // indigo
     icon: "flask-conical",
     order: 0,
   },
   {
-    id: "charters",
+    slug: "charters",
     title: "Charters",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#0891b2", // cyan
     icon: "file-text",
     order: 1,
   },
   {
-    id: "vessels",
+    slug: "vessels",
     title: "Vessels",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#0284c7", // blue
     icon: "ship",
     order: 2,
   },
   {
-    id: "equipment",
+    slug: "equipment",
     title: "Equipment",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#7c3aed", // violet
     icon: "settings",
     order: 3,
   },
   {
-    id: "operations",
+    slug: "operations",
     title: "Operations",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#ea580c", // orange
     icon: "wrench",
     order: 4,
   },
   {
-    id: "methodology",
+    slug: "methodology",
     title: "Methodology",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#16a34a", // green
     icon: "bar-chart",
     order: 5,
   },
   {
-    id: "storyboard",
+    slug: "storyboard",
     title: "Storyboard",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#dc2626", // red
     icon: "film",
     order: 6,
   },
   {
-    id: "personal",
+    slug: "personal",
     title: "Personal",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#db2777", // pink
     icon: "user",
     order: 7,
   },
   {
-    id: "photos",
+    slug: "photos",
     title: "Photos",
     content: "",
-    lastUpdated: new Date().toISOString(),
     color: "#65a30d", // lime
     icon: "camera",
     order: 8,
   },
 ];
 
-export const DEFAULT_SETTINGS: Settings = {
+// Default settings seed data
+export const DEFAULT_SETTINGS_SEED: InsertSettings = {
   darkMode: false,
-  tileOrder: DEFAULT_TILES.map(t => t.id),
+  tileOrder: DEFAULT_TILE_SLUGS,
 };
