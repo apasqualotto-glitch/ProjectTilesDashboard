@@ -286,3 +286,59 @@
     inset: -1px;
   }
 }
+
+/* Quill Editor Styles */
+.ql-container {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.ql-editor {
+  min-height: 300px;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.ql-editor.ql-blank::before {
+  color: hsl(var(--muted-foreground));
+  font-style: normal;
+}
+
+/* Dark mode support for Quill */
+.dark .ql-toolbar {
+  border-color: hsl(var(--border));
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.dark .ql-container {
+  border-color: hsl(var(--border));
+}
+
+.dark .ql-editor {
+  color: hsl(var(--foreground));
+}
+
+.dark .ql-stroke {
+  stroke: hsl(var(--foreground));
+}
+
+.dark .ql-fill {
+  fill: hsl(var(--foreground));
+}
+
+.dark .ql-picker-label {
+  color: hsl(var(--foreground));
+}
+
+.dark .ql-picker-options {
+  background-color: hsl(var(--popover));
+  border-color: hsl(var(--border));
+}
+
+/* Line clamp utility */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
