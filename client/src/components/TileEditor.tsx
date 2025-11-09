@@ -235,33 +235,16 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
           </div>
         </div>
 
-        {/* Editor and Preview */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Editor */}
-          <div className="flex-1 overflow-y-auto border-b">
-            <ReactQuill
-              theme="snow"
-              value={content}
-              onChange={setContent}
-              modules={modules}
-              className="h-full"
-              placeholder="Start writing..."
-            />
-          </div>
-
-          {/* Preview */}
-          <div className="flex-1 overflow-y-auto bg-muted/20">
-            <div className="p-6">
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">
-                Preview
-              </h3>
-              <div
-                className="prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: content || "<p class='text-muted-foreground'>Preview will appear here...</p>" }}
-                data-testid="div-preview"
-              />
-            </div>
-          </div>
+        {/* Editor */}
+        <div className="flex-1 overflow-hidden">
+          <ReactQuill
+            theme="snow"
+            value={content}
+            onChange={setContent}
+            modules={modules}
+            className="h-full"
+            placeholder="Start writing..."
+          />
         </div>
 
         {/* Footer */}
