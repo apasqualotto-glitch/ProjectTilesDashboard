@@ -314,3 +314,35 @@ export const DEFAULT_SETTINGS_SEED: InsertSettings = {
   darkMode: false,
   tileOrder: DEFAULT_TILE_SLUGS,
 };
+
+// ============================================
+// BACKWARD COMPATIBILITY EXPORTS
+// ============================================
+
+// Legacy exports for frontend localStorage compatibility
+// These map to the new database schema types
+export type LegacySettings = {
+  darkMode: boolean;
+  tileOrder: string[];
+  lastBackup?: string;
+};
+
+// Convert seed data to legacy format for frontend
+export const DEFAULT_TILES = DEFAULT_TILE_SLUGS.map((slug, index) => {
+  const seed = DEFAULT_TILES_SEED[index];
+  return {
+    id: slug,
+    title: seed.title,
+    content: seed.content || "",
+    lastUpdated: new Date().toISOString(),
+    color: seed.color || "#4f46e5",
+    icon: seed.icon || "folder-open",
+    order: seed.order,
+    progress: seed.progress,
+  };
+});
+
+export const DEFAULT_SETTINGS: LegacySettings = {
+  darkMode: DEFAULT_SETTINGS_SEED.darkMode || false,
+  tileOrder: DEFAULT_SETTINGS_SEED.tileOrder || [],
+};
