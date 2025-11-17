@@ -13,9 +13,10 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/client/index.html"
+      "dest": "/index.html"
     }
   ],
+  "outputDirectory": "dist/public",
   "env": {
     "NODE_ENV": "production"
   }
