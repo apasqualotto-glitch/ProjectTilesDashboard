@@ -1,10 +1,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { DEFAULT_TILES, DEFAULT_SETTINGS, type LegacyTile, type LegacyPhoto, type LegacySettings } from "@shared/schema";
+import { normalizeColor } from "@/lib/colors";
+import { getDateInfo } from "@/lib/dateUtils";
+import type { AppNotification } from "@/lib/notificationUtils";
 
 interface AppContextType {
   tiles: LegacyTile[];
   photos: LegacyPhoto[];
   settings: LegacySettings;
+  notifications: AppNotification[];
   darkMode: boolean;
   updateTile: (id: string, updates: Partial<LegacyTile>) => void;
   addTile: (tile: Omit<LegacyTile, "id" | "order">) => void;
@@ -16,6 +20,14 @@ interface AppContextType {
   exportData: () => void;
   importData: (jsonString: string) => void;
   resetData: () => void;
+  // New methods for enhanced features
+  addNotification: (notification: Omit<AppNotification, "id" | "timestamp" | "read">) => void;
+  clearNotifications: () => void;
+  markNotificationAsRead: (id: string) => void;
+  getOverdueTiles: () => LegacyTile[];
+  getDueSoonTiles: () => LegacyTile[];
+  getTilesByDependency: (tileId: string) => LegacyTile[];
+  getBlockingTiles: (tileId: string) => LegacyTile[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -61,6 +73,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tiles, setTiles] = useState<LegacyTile[]>([]);
   const [photos, setPhotos] = useState<LegacyPhoto[]>([]);
   const [settings, setSettings] = useState<LegacySettings>(DEFAULT_SETTINGS);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load data from localStorage on mount
@@ -78,6 +91,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const updated = {
             ...tile,
             icon: migrateEmojiToIcon(tile.icon),
+            // Normalize any existing colors to the pastel palette (safer migration)
+            color: normalizeColor(tile.color || ""),
           };
           // Ensure todo-notes tile has the large variant
           if (tile.id === "todo-notes" && !tile.variant) {
@@ -87,12 +102,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
         
         // Backfill any missing default tiles (e.g., todo-notes for existing users)
-        const existingIds = new Set(migratedTiles.map(t => t.id));
-        const missingTiles = DEFAULT_TILES.filter(defaultTile => !existingIds.has(defaultTile.id));
+  const existingIds = new Set(migratedTiles.map((t: LegacyTile) => t.id));
+  const missingTiles = DEFAULT_TILES.filter(defaultTile => !existingIds.has(defaultTile.id));
         
         if (missingTiles.length > 0) {
           // Add missing tiles at the end, preserving their order values
-          const maxOrder = Math.max(...migratedTiles.map(t => t.order), -1);
+          const maxOrder = Math.max(...migratedTiles.map((t: LegacyTile) => t.order), -1);
           const tilesWithMissing = [
             ...migratedTiles,
             ...missingTiles.map((tile, index) => ({
@@ -162,7 +177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTiles(prev =>
       prev.map(tile =>
         tile.id === id
-          ? { ...tile, ...updates, lastUpdated: new Date().toISOString() }
+          ? { ...tile, ...updates, color: updates.color ? normalizeColor(updates.color) : tile.color, lastUpdated: new Date().toISOString() }
           : tile
       )
     );
@@ -174,6 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: `tile_${Date.now()}`,
       order: tiles.length,
       lastUpdated: new Date().toISOString(),
+      color: normalizeColor(tileData.color || ""),
     };
     setTiles(prev => [...prev, newTile]);
     setSettings(prev => ({
@@ -328,10 +344,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // New methods for notifications
+  const addNotification = (notification: Omit<AppNotification, "id" | "timestamp" | "read">) => {
+    const newNotification: AppNotification = {
+      ...notification,
+      id: `notif-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+    setNotifications((prev) => [newNotification, ...prev].slice(0, 50)); // Keep only last 50
+  };
+
+  const clearNotifications = () => {
+    setNotifications([]);
+  };
+
+  const markNotificationAsRead = (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  };
+
+  // Helper methods for date-based filtering
+  const getOverdueTiles = (): LegacyTile[] => {
+    return tiles.filter((tile) => {
+      if (!tile.dueDate) return false;
+      const dateInfo = getDateInfo(tile.dueDate);
+      return dateInfo?.isOverdue ?? false;
+    });
+  };
+
+  const getDueSoonTiles = (): LegacyTile[] => {
+    return tiles.filter((tile) => {
+      if (!tile.dueDate) return false;
+      const dateInfo = getDateInfo(tile.dueDate);
+      return (dateInfo?.isDueToday || dateInfo?.isDueSoon) ?? false;
+    });
+  };
+
+  // Helper methods for dependencies
+  const getTilesByDependency = (tileId: string): LegacyTile[] => {
+    return tiles.filter((tile) => tile.dependsOn?.includes(tileId) ?? false);
+  };
+
+  const getBlockingTiles = (tileId: string): LegacyTile[] => {
+    const tile = tiles.find((t) => t.id === tileId);
+    if (!tile?.dependsOn) return [];
+    return tiles.filter((t) => tile.dependsOn?.includes(t.id) ?? false);
+  };
+
   const value = {
     tiles,
     photos,
     settings,
+    notifications,
     darkMode: settings.darkMode,
     updateTile,
     addTile,
@@ -343,6 +407,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     exportData,
     importData,
     resetData,
+    addNotification,
+    clearNotifications,
+    markNotificationAsRead,
+    getOverdueTiles,
+    getDueSoonTiles,
+    getTilesByDependency,
+    getBlockingTiles,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

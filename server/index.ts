@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -9,6 +10,7 @@ declare module 'http' {
     rawBody: unknown
   }
 }
+
 app.use(express.json({
   verify: (req, _res, buf) => {
     req.rawBody = buf;
@@ -47,35 +49,62 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  try {
+    const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    // Global error handler (FIXED: no more "throw err")
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+    });
 
-    res.status(status).json({ message });
-    throw err;
-  });
+    // Start server on PORT (default 5000)
+    const port = parseInt(process.env.PORT || '5000', 10);
+    
+    const serverInstance = server.listen({
+      port,
+      host: "0.0.0.0",
+    }, async () => {
+      log(`serving on port ${port}`);
+      
+      // Setup Vite (dev) or static files (prod) AFTER server starts
+      try {
+        if (app.get("env") === "development") {
+          console.log("[DEBUG] Starting Vite setup...");
+          await setupVite(app, server);
+          log("Vite setup complete - dev server ready");
+          console.log("[DEBUG] Vite setup completed successfully");
+        } else {
+          serveStatic(app);
+        }
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        log(`Error setting up Vite: ${errorMsg}`);
+        console.error("[ERROR] Full error:", err);
+        process.exit(1);
+      }
+    });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
+    serverInstance.on('error', (err: any) => {
+      console.error('[Server Error]', err);
+      process.exit(1);
+    });
+
+    // Keep the event loop alive for dev mode
+    if (app.get("env") === "development") {
+      console.log("[DEBUG] Setting up keep-alive interval");
+      setInterval(() => {}, 1000);
+    }
+
+    // Handle any uncaught errors
+    process.on('unhandledRejection', (reason) => {
+      log(`Unhandled Rejection: ${reason}`);
+      console.error(reason);
+    });
+  } catch (err) {
+    log(`Fatal startup error: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(err);
+    process.exit(1);
   }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
 })();

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Moon, Sun, Download, Upload, LayoutGrid, Clock } from "lucide-react";
+import { Moon, Sun, LayoutGrid, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useApp } from "@/contexts/AppContext";
 import { WeatherWidget } from "@/components/WeatherWidget";
+import { BackupDialog } from "@/components/BackupDialog";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 interface HeaderProps {
   searchQuery: string;
@@ -13,29 +15,7 @@ interface HeaderProps {
 }
 
 export function Header({ searchQuery, onSearchChange, currentView, onViewChange }: HeaderProps) {
-  const { darkMode, toggleDarkMode, exportData, importData } = useApp();
-  const [isImporting, setIsImporting] = useState(false);
-
-  const handleImport = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        setIsImporting(true);
-        try {
-          const text = await file.text();
-          importData(text);
-        } catch (error) {
-          alert("Error importing file. Please check the file format.");
-        } finally {
-          setIsImporting(false);
-        }
-      }
-    };
-    input.click();
-  };
+  const { darkMode, toggleDarkMode } = useApp();
 
   return (
     <header className="sticky top-0 z-50 bg-background border-b border-border">
@@ -90,26 +70,11 @@ export function Header({ searchQuery, onSearchChange, currentView, onViewChange 
               <Clock className="w-5 h-5" />
             </Button>
 
-            {/* Export/Import */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={exportData}
-              title="Export Data"
-              data-testid="button-export"
-            >
-              <Download className="w-5 h-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleImport}
-              disabled={isImporting}
-              title="Import Data"
-              data-testid="button-import"
-            >
-              <Upload className="w-5 h-5" />
-            </Button>
+            {/* Notifications */}
+            <NotificationCenter />
+
+            {/* Backup & Export */}
+            <BackupDialog />
 
             {/* Dark Mode Toggle */}
             <Button

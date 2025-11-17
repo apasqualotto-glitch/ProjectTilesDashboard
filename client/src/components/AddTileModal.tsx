@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/contexts/AppContext";
-import { HexColorPicker } from "react-colorful";
+import { PASTEL_COLORS, DEFAULT_PASTEL_COLOR, getTextColor } from "@/lib/colors";
 import { AVAILABLE_ICONS, getIconComponent } from "@/lib/icons";
 
 interface AddTileModalProps {
@@ -15,7 +15,7 @@ export function AddTileModal({ onClose }: AddTileModalProps) {
   const { addTile } = useApp();
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState("folder-open");
-  const [color, setColor] = useState("#4f46e5");
+  const [color, setColor] = useState<string>(DEFAULT_PASTEL_COLOR);
   const IconPreview = getIconComponent(icon);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -98,20 +98,35 @@ export function AddTileModal({ onClose }: AddTileModalProps) {
 
           {/* Color Picker */}
           <div className="space-y-2">
-            <Label>Color</Label>
-            <div className="flex items-start gap-4">
-              <HexColorPicker color={color} onChange={setColor} />
-              <div className="space-y-2 flex-1">
-                <Input
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="font-mono"
-                  data-testid="input-new-tile-color"
+            <Label>Select a Pastel Color</Label>
+            <div className="grid grid-cols-4 gap-3 p-3 bg-muted rounded-lg">
+              {PASTEL_COLORS.map((pastelColor) => (
+                <button
+                  key={pastelColor}
+                  type="button"
+                  onClick={() => setColor(pastelColor)}
+                  className={`p-4 rounded-lg transition-all border-2 ${
+                    color === pastelColor
+                      ? 'border-foreground scale-110 shadow-lg'
+                      : 'border-transparent hover:border-foreground'
+                  }`}
+                  style={{ backgroundColor: pastelColor }}
+                  title={pastelColor}
+                  data-testid={`button-new-tile-color-${pastelColor}`}
                 />
-                <div
-                  className="w-full h-16 rounded-lg border-2"
-                  style={{ backgroundColor: color }}
-                />
+              ))}
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+              <div
+                className="w-16 h-16 rounded-lg border-2 flex-shrink-0"
+                style={{
+                  backgroundColor: color,
+                  borderColor: getTextColor(color),
+                }}
+              />
+              <div className="flex-1 text-sm">
+                <p className="font-semibold text-foreground">Selected: {color}</p>
+                <p className="text-muted-foreground">Preview with text color</p>
               </div>
             </div>
           </div>

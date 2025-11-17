@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from "date-fns";
 import { useApp } from "@/contexts/AppContext";
-import { Tile } from "@shared/schema";
+import type { LegacyTile } from "@shared/schema";
 import { getIconComponent } from "@/lib/icons";
 
 export function Timeline() {
@@ -30,7 +30,7 @@ export function Timeline() {
 
       {/* Timeline */}
       <div className="space-y-4">
-        {sortedByUpdate.map((tile: Tile) => {
+        {sortedByUpdate.map((tile: LegacyTile) => {
           const timeAgo = formatDistanceToNow(new Date(tile.lastUpdated), {
             addSuffix: true,
           });

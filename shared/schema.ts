@@ -38,6 +38,19 @@ export type InsertTile = typeof tiles.$inferInsert;
 export const insertTileSchema = createInsertSchema(tiles).omit({ id: true, createdAt: true, updatedAt: true });
 export const selectTileSchema = createSelectSchema(tiles);
 
+// Subtask type
+export type Subtask = {
+  id: string;
+  title: string;
+  completed: boolean;
+};
+
+// Reminder type
+export type ReminderConfig = {
+  dueDate: string; // ISO date string
+  recurring?: "daily" | "weekly" | "monthly" | null;
+};
+
 // Compatibility type for legacy localStorage data
 export type LegacyTile = {
   id: string; // legacy string ID (maps to slug)
@@ -51,6 +64,12 @@ export type LegacyTile = {
   template?: string;
   templateData?: any;
   variant?: "large"; // Special variant for large tiles (3x2 grid)
+  // New fields for enhanced features
+  dueDate?: string; // ISO date string
+  reminder?: ReminderConfig;
+  dependsOn?: string[]; // Array of tile IDs this tile depends on
+  subtasks?: Subtask[];
+  // Note: line-level metadata feature removed in rollback
 };
 
 // Photos table
@@ -240,7 +259,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "research",
     title: "Research",
     content: "",
-    color: "#4f46e5", // indigo
+    color: "#FFB3BA", // pastel pink
     icon: "flask-conical",
     order: 0,
   },
@@ -248,7 +267,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "charters",
     title: "Charters",
     content: "",
-    color: "#0891b2", // cyan
+    color: "#FFCCCB", // pastel light pink
     icon: "file-text",
     order: 1,
   },
@@ -256,7 +275,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "vessels",
     title: "Vessels",
     content: "",
-    color: "#0284c7", // blue
+    color: "#FFFFBA", // pastel yellow
     icon: "ship",
     order: 2,
   },
@@ -264,7 +283,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "equipment",
     title: "Equipment",
     content: "",
-    color: "#7c3aed", // violet
+    color: "#BAE1BA", // pastel green
     icon: "settings",
     order: 3,
   },
@@ -272,7 +291,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "operations",
     title: "Operations",
     content: "",
-    color: "#ea580c", // orange
+    color: "#BAC7FF", // pastel blue
     icon: "wrench",
     order: 4,
   },
@@ -280,7 +299,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "methodology",
     title: "Methodology",
     content: "",
-    color: "#16a34a", // green
+    color: "#E0BBE4", // pastel purple
     icon: "bar-chart",
     order: 5,
   },
@@ -288,7 +307,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "storyboard",
     title: "Storyboard",
     content: "",
-    color: "#dc2626", // red
+    color: "#FFDAB9", // pastel peach
     icon: "film",
     order: 6,
   },
@@ -296,7 +315,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "personal",
     title: "Personal",
     content: "",
-    color: "#db2777", // pink
+    color: "#B4E7FF", // pastel cyan
     icon: "user",
     order: 7,
   },
@@ -304,7 +323,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "photos",
     title: "Photos",
     content: "",
-    color: "#65a30d", // lime
+    color: "#FFB3BA", // pastel pink (cycled)
     icon: "camera",
     order: 8,
   },
@@ -312,7 +331,7 @@ export const DEFAULT_TILES_SEED: InsertTile[] = [
     slug: "todo-notes",
     title: "Todo List & Notes",
     content: "",
-    color: "#6366f1", // indigo
+    color: "#FFCCCB", // pastel light pink (cycled)
     icon: "list-checks",
     order: 9,
   },
@@ -343,6 +362,8 @@ export type LegacyPhoto = {
   thumbnail: string;
   caption?: string;
   timestamp: string;
+  filename?: string;
+  mimeType?: string;
 };
 
 // Convert seed data to legacy format for frontend

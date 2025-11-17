@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Palette, Save, Upload, Trash2, Image as ImageIcon } from "lucide-react";
+import { X, Palette, Save, Upload, Trash2, Image as ImageIcon, Download, Calendar, Repeat, Link2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useApp } from "@/contexts/AppContext";
-import type { LegacyTile } from "@shared/schema";
+import type { LegacyTile, ReminderConfig } from "@shared/schema";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
-import { HexColorPicker } from "react-colorful";
+import { PASTEL_COLORS, DEFAULT_PASTEL_COLOR, getTextColor as getPastelTextColor, normalizeColor } from "@/lib/colors";
 import { getIconComponent } from "@/lib/icons";
 import { useToast } from "@/hooks/use-toast";
+import { SubtaskManager } from "@/components/SubtaskManager";
+import { DependencyManager } from "@/components/DependencyManager";
+import { DueDateDisplay } from "@/components/DueDateDisplay";
+import { dateToISO } from "@/lib/dateUtils";
+// line-metadata removed per rollback request
 
 interface TileEditorProps {
   tileId: string;
@@ -25,11 +30,18 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
   
   const [title, setTitle] = useState(tile?.title || "");
   const [content, setContent] = useState(tile?.content || "");
-  const [color, setColor] = useState(tile?.color || "#4f46e5");
+  const [color, setColor] = useState<string>(normalizeColor(tile?.color || DEFAULT_PASTEL_COLOR));
   const [progress, setProgress] = useState(tile?.progress || 0);
   const [showProgress, setShowProgress] = useState((tile?.progress || 0) > 0);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [dueDate, setDueDate] = useState<string>(tile?.dueDate || "");
+  const [reminderType, setReminderType] = useState<"daily" | "weekly" | "monthly" | null>(
+    tile?.reminder?.recurring || null
+  );
+  const [dependsOn, setDependsOn] = useState<string[]>(tile?.dependsOn || []);
+  const [subtasks, setSubtasks] = useState(tile?.subtasks || []);
+  const [activeTab, setActiveTab] = useState<"content" | "dates" | "subtasks" | "dependencies" | "photos">("content");
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -43,6 +55,11 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
     setColor(tile.color);
     setProgress(tile.progress || 0);
     setShowProgress((tile.progress || 0) > 0);
+    setDueDate(tile.dueDate || "");
+    setReminderType(tile.reminder?.recurring || null);
+    setDependsOn(tile.dependsOn || []);
+    setSubtasks(tile.subtasks || []);
+    // line metadata removed during rollback
   }, [tile]);
 
   // Auto-save on content change (debounced)
@@ -73,6 +90,10 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
       content,
       color,
       progress: showProgress ? progress : undefined,
+      dueDate: dueDate || undefined,
+      reminder: dueDate && reminderType ? { dueDate, recurring: reminderType } : undefined,
+      dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
     };
     
     updateTile(tileId, updates);
@@ -105,31 +126,45 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
         continue;
       }
 
-      // Check if it's an image
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: "Invalid file type",
-          description: `${file.name} is not an image`,
-          variant: "destructive",
-        });
-        continue;
-      }
-
       try {
         // Convert to base64
         const reader = new FileReader();
         reader.onload = async (event) => {
           const base64Data = event.target?.result as string;
-          
-          // Create thumbnail (resize to 200x200)
-          const thumbnail = await createThumbnail(base64Data);
-          
+          // Create thumbnail (resize to 200x200) for images, otherwise a placeholder
+          let thumbnail: string;
+          if (file.type.startsWith('image/')) {
+            thumbnail = await createThumbnail(base64Data);
+          } else {
+            // create a simple placeholder thumbnail showing the file extension
+            const canvas = document.createElement('canvas');
+            const MAX_SIZE = 200;
+            canvas.width = MAX_SIZE;
+            canvas.height = MAX_SIZE;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = '#f3f4f6';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.fillStyle = '#111827';
+              ctx.font = 'bold 36px sans-serif';
+              const ext = (file.name.split('.').pop() || '').toUpperCase();
+              const text = ext || 'FILE';
+              const metrics = ctx.measureText(text);
+              const x = (canvas.width - metrics.width) / 2;
+              const y = (canvas.height + 12) / 2;
+              ctx.fillText(text, x, y);
+            }
+            thumbnail = canvas.toDataURL('image/png');
+          }
+
           addPhoto({
             tileId,
             base64Data,
             thumbnail,
             caption: "",
             timestamp: new Date().toISOString(),
+            filename: file.name,
+            mimeType: file.type || 'application/octet-stream',
           });
 
           toast({
@@ -195,17 +230,7 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
 
   if (!tile) return null;
 
-  // Determine text color based on background brightness
-  const getTextColor = (hexColor: string) => {
-    const rgb = parseInt(hexColor.slice(1), 16);
-    const r = (rgb >> 16) & 0xff;
-    const g = (rgb >> 8) & 0xff;
-    const b = (rgb >> 0) & 0xff;
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness > 128 ? "#000000" : "#ffffff";
-  };
-
-  const textColor = getTextColor(color);
+  const textColor = getPastelTextColor(color);
   const IconComponent = getIconComponent(tile?.icon || "folder-open");
 
   const modules = {
@@ -240,7 +265,7 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Color Picker */}
+            {/* Pastel Color Picker */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -252,52 +277,32 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
                   <Palette className="w-5 h-5" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-3">
+              <PopoverContent className="w-auto p-4">
                 <div className="space-y-3">
-                  <Label>Tile Color</Label>
-                  <HexColorPicker color={color} onChange={setColor} />
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="font-mono text-sm"
-                      data-testid="input-color-hex"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        handleSave();
-                      }}
-                      data-testid="button-apply-color"
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                  {/* Preset colors */}
-                  <div className="grid grid-cols-6 gap-2">
-                    {[
-                      "#4f46e5",
-                      "#0891b2",
-                      "#0284c7",
-                      "#7c3aed",
-                      "#ea580c",
-                      "#16a34a",
-                      "#dc2626",
-                      "#db2777",
-                      "#65a30d",
-                      "#a855f7",
-                      "#14b8a6",
-                      "#f59e0b",
-                    ].map(presetColor => (
+                  <Label className="text-sm font-medium">Choose a Pastel Color</Label>
+                  {/* Pastel colors grid - 4 columns */}
+                  <div className="grid grid-cols-4 gap-3">
+                    {PASTEL_COLORS.map((pastelColor) => (
                       <button
-                        key={presetColor}
-                        onClick={() => setColor(presetColor)}
-                        className="w-8 h-8 rounded border-2 border-transparent hover:border-foreground transition-colors"
-                        style={{ backgroundColor: presetColor }}
-                        data-testid={`button-preset-color-${presetColor}`}
+                        key={pastelColor}
+                        onClick={() => {
+                          setColor(pastelColor);
+                          handleSave();
+                        }}
+                        className={`w-10 h-10 rounded-lg transition-all border-2 ${
+                          color === pastelColor
+                            ? 'border-foreground scale-110'
+                            : 'border-transparent hover:border-foreground'
+                        }`}
+                        style={{ backgroundColor: pastelColor }}
+                        title={pastelColor}
+                        data-testid={`button-pastel-color-${pastelColor}`}
                       />
                     ))}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Selected: {color}
+                  </p>
                 </div>
               </PopoverContent>
             </Popover>
@@ -314,111 +319,287 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
           </div>
         </div>
 
-        {/* Progress Bar Toggle */}
-        <div className="px-6 py-4 border-b bg-muted/50">
-          <div className="flex items-center gap-4">
-            <input
-              type="checkbox"
-              id="show-progress"
-              checked={showProgress}
-              onChange={(e) => setShowProgress(e.target.checked)}
-              className="w-4 h-4"
-              data-testid="checkbox-show-progress"
-            />
-            <Label htmlFor="show-progress" className="cursor-pointer">
-              Show Progress
-            </Label>
-            {showProgress && (
-              <div className="flex items-center gap-3 flex-1">
-                <Slider
-                  value={[progress]}
-                  onValueChange={([value]) => setProgress(value)}
-                  max={100}
-                  step={1}
-                  className="flex-1"
-                  data-testid="slider-progress"
-                />
-                <span className="text-sm font-medium w-12 text-right">
-                  {progress}%
-                </span>
-              </div>
-            )}
-          </div>
+        {/* Toolbar - Feature Tabs */}
+        <div className="flex items-center gap-1 px-4 py-3 border-b bg-muted/30 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab("content")}
+            className={`px-3 py-2 rounded-md font-medium text-sm whitespace-nowrap transition-colors ${
+              activeTab === "content"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+          >
+            Content
+          </button>
+          <button
+            onClick={() => setActiveTab("dates")}
+            className={`px-3 py-2 rounded-md font-medium text-sm whitespace-nowrap transition-colors flex items-center gap-1 ${
+              activeTab === "dates"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Due Date
+          </button>
+          <button
+            onClick={() => setActiveTab("subtasks")}
+            className={`px-3 py-2 rounded-md font-medium text-sm whitespace-nowrap transition-colors ${
+              activeTab === "subtasks"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+          >
+            Subtasks
+          </button>
+          <button
+            onClick={() => setActiveTab("dependencies")}
+            className={`px-3 py-2 rounded-md font-medium text-sm whitespace-nowrap transition-colors flex items-center gap-1 ${
+              activeTab === "dependencies"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+          >
+            <Link2 className="w-4 h-4" />
+            Depends
+          </button>
+          <button
+            onClick={() => setActiveTab("photos")}
+            className={`px-3 py-2 rounded-md font-medium text-sm whitespace-nowrap transition-colors flex items-center gap-1 ${
+              activeTab === "photos"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+          >
+            <ImageIcon className="w-4 h-4" />
+            Photos & Files ({tilePhotos.length})
+          </button>
         </div>
 
-        {/* Editor */}
+        {/* Content Area - Tabbed */}
         <div className="flex-1 overflow-y-auto">
-          <ReactQuill
-            theme="snow"
-            value={content}
-            onChange={setContent}
-            modules={modules}
-            className="h-[400px]"
-            placeholder="Start writing..."
-          />
-          
-          {/* Photos Section */}
-          <div className="p-6 border-t bg-muted/20">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-5 h-5" />
-                <h3 className="font-semibold">Photos & Files</h3>
-                <span className="text-sm text-muted-foreground">({tilePhotos.length})</span>
+          {/* Content Tab */}
+          {activeTab === "content" && (
+            <div className="h-full flex flex-col">
+              <ReactQuill
+                theme="snow"
+                value={content}
+                onChange={setContent}
+                modules={modules}
+                className="flex-1"
+                placeholder="Start writing..."
+              />
+
+              {/* Progress Bar - inline with editor */}
+              <div className="px-6 py-4 border-t bg-muted/50 space-y-3">
+                <div className="flex items-center gap-4">
+                  <input
+                    type="checkbox"
+                    id="show-progress"
+                    checked={showProgress}
+                    onChange={(e) => setShowProgress(e.target.checked)}
+                    className="w-4 h-4"
+                    data-testid="checkbox-show-progress"
+                  />
+                  <Label htmlFor="show-progress" className="cursor-pointer">
+                    Show Progress
+                  </Label>
+                  {showProgress && (
+                    <div className="flex items-center gap-3 flex-1">
+                      <Slider
+                        value={[progress]}
+                        onValueChange={([value]) => setProgress(value)}
+                        max={100}
+                        step={1}
+                        className="flex-1"
+                        data-testid="slider-progress"
+                      />
+                      <span className="text-sm font-medium w-12 text-right">
+                        {progress}%
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                data-testid="button-upload-photo"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFileUpload}
-                className="hidden"
-                data-testid="input-file-upload"
+            </div>
+          )}
+
+          {/* Due Date Tab */}
+          {activeTab === "dates" && (
+            <div className="p-6 space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Due Date</Label>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="mt-2"
+                />
+                {dueDate && (
+                  <div className="mt-3">
+                    <DueDateDisplay tile={{ ...tile, dueDate }} />
+                  </div>
+                )}
+              </div>
+
+              {dueDate && (
+                <div>
+                  <Label className="text-sm font-medium">Reminder</Label>
+                  <select
+                    value={reminderType || ""}
+                    onChange={(e) =>
+                      setReminderType(
+                        (e.target.value as "daily" | "weekly" | "monthly") || null
+                      )
+                    }
+                    className="w-full px-3 py-2 rounded border border-input bg-background mt-2"
+                  >
+                    <option value="">No reminder</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                  {reminderType && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      🔔 You'll get a {reminderType} reminder starting {dueDate}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Subtasks Tab */}
+          {activeTab === "subtasks" && (
+            <div className="p-6">
+              <SubtaskManager subtasks={subtasks} onChange={setSubtasks} />
+            </div>
+          )}
+
+          {/* Dependencies Tab */}
+          {activeTab === "dependencies" && (
+            <div className="p-6">
+              <DependencyManager
+                currentTileId={tileId}
+                dependsOn={dependsOn}
+                onChange={setDependsOn}
               />
             </div>
+          )}
 
-            {tilePhotos.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {tilePhotos.map(photo => (
-                  <div
-                    key={photo.id}
-                    className="relative group aspect-square rounded-lg overflow-hidden border bg-card hover:shadow-lg transition-shadow"
-                    data-testid={`photo-${photo.id}`}
+          {/* Photos Tab */}
+          {activeTab === "photos" && (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-5 h-5" />
+                  <h3 className="font-semibold">Photos & Files</h3>
+                  <span className="text-sm text-muted-foreground">({tilePhotos.length})</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-upload-photo"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Upload
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="*/*"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  data-testid="input-file-upload"
+                />
+              </div>
+
+              {tilePhotos.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  {tilePhotos.map(photo => (
+                    <div
+                      key={photo.id}
+                      className="relative group aspect-square rounded-lg overflow-visible border bg-card hover:shadow-lg transition-shadow"
+                      data-testid={`photo-${photo.id}`}
                   >
                     <img
                       src={photo.thumbnail}
                       alt={photo.caption || "Photo"}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover cursor-pointer"
+                      onClick={() => {
+                        const a = document.createElement('a');
+                        a.href = photo.base64Data;
+                        a.target = '_blank';
+                        a.click();
+                      }}
                     />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                       <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => handleDeletePhoto(photo.id)}
-                        data-testid={`button-delete-photo-${photo.id}`}
+                        variant="ghost"
+                        size="lg"
+                        className="h-12 w-12"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const a = document.createElement('a');
+                          a.href = photo.base64Data;
+                          a.target = '_blank';
+                          a.click();
+                        }}
+                        title="Open file"
+                        data-testid={`button-open-photo-${photo.id}`}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <ImageIcon className="w-6 h-6" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="lg"
+                        className="h-12 w-12"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const orig = photo.filename;
+                          const filename = orig ? orig : `photo-${photo.id}`;
+                          const a = document.createElement('a');
+                          a.href = photo.base64Data;
+                          a.download = filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
+                        title="Download file"
+                        data-testid={`button-download-photo-${photo.id}`}
+                      >
+                        <Download className="w-6 h-6" />
                       </Button>
                     </div>
+                    <Button
+                      variant="destructive"
+                      size="lg"
+                      className="absolute top-2 right-2 h-10 w-10 bg-red-600 hover:bg-red-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Are you sure you want to delete this file?')) {
+                          handleDeletePhoto(photo.id);
+                        }
+                      }}
+                      title="Delete file"
+                      data-testid={`button-delete-photo-${photo.id}`}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                <p>No photos yet</p>
-                <p className="text-sm">Click Upload to add photos to this tile</p>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                  <p>No photos yet</p>
+                  <p className="text-sm">Click Upload to add photos to this tile</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

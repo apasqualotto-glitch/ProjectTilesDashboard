@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, hasDatabase } from "./db";
 import { 
   tiles, 
   photos, 
@@ -329,5 +329,81 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Export singleton instance
-export const storage = new DatabaseStorage();
+// In-memory fallback storage used when no real DB is configured (development only)
+class InMemoryStorage implements IStorage {
+  private _tiles: any[] = [];
+  private _photos: any[] = [];
+  private _settings: any[] = [];
+  private _tileVersions: any[] = [];
+  private _sharedLinks: any[] = [];
+  private _reminders: any[] = [];
+  private _analytics: any[] = [];
+  private _nextId = 1;
+
+  constructor() {
+    // Seed with defaults if available
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const shared = require("@shared/schema");
+      if (shared && shared.DEFAULT_TILES_SEED) {
+        this._tiles = shared.DEFAULT_TILES_SEED.map((t: any, idx: number) => ({ ...t, id: this._nextId++ }));
+      }
+      if (shared && shared.DEFAULT_SETTINGS_SEED) {
+        this._settings = [{ ...shared.DEFAULT_SETTINGS_SEED, id: this._nextId++ }];
+      }
+    } catch (e) {
+      // ignore if shared schema cannot be required synchronously
+    }
+  }
+
+  // Tiles
+  async getTiles(_userId?: string) { return this._tiles; }
+  async getTile(id: number) { return this._tiles.find(t => t.id === id); }
+  async getTileBySlug(slug: string) { return this._tiles.find(t => t.slug === slug); }
+  async createTile(tile: any) { const newTile = { ...tile, id: this._nextId++ }; this._tiles.push(newTile); return newTile; }
+  async updateTile(id: number, tile: Partial<any>) { const idx = this._tiles.findIndex(t => t.id === id); if (idx === -1) return undefined; this._tiles[idx] = { ...this._tiles[idx], ...tile }; return this._tiles[idx]; }
+  async deleteTile(id: number) { const before = this._tiles.length; this._tiles = this._tiles.filter(t => t.id !== id); return this._tiles.length < before; }
+
+  // Photos
+  async getAllPhotos() { return this._photos; }
+  async getPhotos(tileId: number) { return this._photos.filter(p => p.tileId === tileId); }
+  async getPhoto(id: number) { return this._photos.find(p => p.id === id); }
+  async createPhoto(photo: any) { const np = { ...photo, id: this._nextId++ }; this._photos.push(np); return np; }
+  async deletePhoto(id: number) { const before = this._photos.length; this._photos = this._photos.filter(p => p.id !== id); return this._photos.length < before; }
+
+  // Settings
+  async getSettings(_userId?: string) { return this._settings[0]; }
+  async createSettings(settings: any) { const ns = { ...settings, id: this._nextId++ }; this._settings.push(ns); return ns; }
+  async updateSettings(id: number, settings: Partial<any>) { const idx = this._settings.findIndex(s => s.id === id); if (idx === -1) return undefined; this._settings[idx] = { ...this._settings[idx], ...settings }; return this._settings[idx]; }
+
+  // Tile versions
+  async getTileVersions(tileId: number) { return this._tileVersions.filter(v => v.tileId === tileId); }
+  async createTileVersion(version: any) { const nv = { ...version, id: this._nextId++ }; this._tileVersions.push(nv); return nv; }
+
+  // Shared links
+  async getSharedLink(shareToken: string) { return this._sharedLinks.find(s => s.shareToken === shareToken); }
+  async getSharedLinksForTile(tileId: number) { return this._sharedLinks.filter(s => s.tileId === tileId); }
+  async createSharedLink(link: any) { const nl = { ...link, id: this._nextId++ }; this._sharedLinks.push(nl); return nl; }
+  async updateSharedLink(id: number, link: Partial<any>) { const idx = this._sharedLinks.findIndex(s => s.id === id); if (idx === -1) return undefined; this._sharedLinks[idx] = { ...this._sharedLinks[idx], ...link }; return this._sharedLinks[idx]; }
+  async deleteSharedLink(id: number) { const before = this._sharedLinks.length; this._sharedLinks = this._sharedLinks.filter(s => s.id !== id); return this._sharedLinks.length < before; }
+
+  // Reminders
+  async getReminders(tileId: number) { return this._reminders.filter(r => r.tileId === tileId); }
+  async getActiveReminders() { return this._reminders.filter(r => !r.notified); }
+  async createReminder(reminder: any) { const nr = { ...reminder, id: this._nextId++ }; this._reminders.push(nr); return nr; }
+  async updateReminder(id: number, reminder: Partial<any>) { const idx = this._reminders.findIndex(r => r.id === id); if (idx === -1) return undefined; this._reminders[idx] = { ...this._reminders[idx], ...reminder }; return this._reminders[idx]; }
+  async deleteReminder(id: number) { const before = this._reminders.length; this._reminders = this._reminders.filter(r => r.id !== id); return this._reminders.length < before; }
+
+  // Analytics
+  async createAnalyticsEvent(event: any) { const ne = { ...event, id: this._nextId++ }; this._analytics.push(ne); return ne; }
+  async getAnalyticsEvents(_tileId?: number, _limit: number = 100) { return this._analytics.slice(0, _limit); }
+
+  // Initialization
+  async initializeDatabase() {
+    // Nothing to do — seeds already applied in constructor
+    return;
+  }
+}
+
+// Export singleton instance (DB-backed or in-memory fallback)
+export const storage = hasDatabase ? new DatabaseStorage() : new InMemoryStorage();

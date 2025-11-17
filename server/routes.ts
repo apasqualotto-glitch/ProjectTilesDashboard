@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTileSchema, insertPhotoSchema, insertSettingsSchema } from "@shared/schema";
+import { insertTileSchema, insertPhotoSchema } from "@shared/schema";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 
@@ -257,7 +257,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const validatedData = updateSchema.parse(req.body);
-      const settings = await storage.updateSettings(existingSettings.id, validatedData);
+      // Convert lastBackup string to Date if provided (storage expects Date|null)
+      const dataToUpdate: any = { ...validatedData };
+      if (validatedData.lastBackup) {
+        dataToUpdate.lastBackup = new Date(validatedData.lastBackup);
+      }
+      const settings = await storage.updateSettings(existingSettings.id, dataToUpdate);
       
       if (!settings) {
         return res.status(404).json({ error: "Failed to update settings" });
