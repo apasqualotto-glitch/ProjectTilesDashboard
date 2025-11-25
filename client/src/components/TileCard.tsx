@@ -34,9 +34,12 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
   const tilePhotos = photos.filter(p => p.tileId === tile.id);
 
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`relative flex flex-col p-6 rounded-lg border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 text-left w-full ${
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+      role="button"
+      tabIndex={0}
+      className={`relative flex flex-col p-6 rounded-lg border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 text-left w-full cursor-pointer ${
         isLargeTile ? "min-h-[400px]" : "min-h-[220px]"
       }`}
       style={{
@@ -122,22 +125,28 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
       {hasContent ? (
         <div
           className={`text-sm opacity-90 mb-3 break-words
-            [&_ul]:list-disc [&_ul]:list-inside [&_ul]:ml-2
-            [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:ml-2
-            [&_li]:block [&_li]:mb-1
-            [&_input[type="checkbox"]]:mr-2 [&_input[type="checkbox"]]:align-text-bottom [&_input[type="checkbox"]]:cursor-pointer
+            [&_ul]:list-disc [&_ul]:list-inside [&_ul]:ml-4 [&_ul]:space-y-1
+            [&_ol]:list-decimal [&_ol]:list-inside [&_ol]:ml-4 [&_ol]:space-y-1
+            [&_li]:leading-relaxed
+            [&_li_ol]:ml-6 [&_li_ul]:ml-6
+            [&_li_ol_ol]:ml-8 [&_li_ul_ul]:ml-8
+            [&_li_ol_ol_ol]:ml-10 [&_li_ul_ul_ul]:ml-10
+            [&_.ql-check-list]:list-none [&_.ql-check-list]:space-y-1
+            [&_.ql-check-list_li]:flex [&_.ql-check-list_li]:items-start [&_.ql-check-list_li]:gap-2 [&_.ql-check-list_li]:ml-4
+            [&_.ql-check-list_li:before]:content-none
+            [&_input.ql-checkbox]:mt-0.5 [&_input.ql-checkbox]:flex-shrink-0 [&_input.ql-checkbox]:pointer-events-none
             [&_strong]:font-bold [&_em]:italic [&_u]:underline
-            [&_blockquote]:border-l-4 [&_blockquote]:border-current [&_blockquote]:pl-3 [&_blockquote]:opacity-70
+            [&_blockquote]:border-l-4 [&_blockquote]:border-current [&_blockquote]:pl-3 [&_blockquote]:opacity-70 [&_blockquote]:italic
             [&_code]:bg-black/20 [&_code]:px-2 [&_code]:rounded [&_code]:font-mono [&_code]:text-sm
-            [&_pre]:bg-black/20 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto
-            ${isLargeTile ? "line-clamp-[16]" : "line-clamp-3"}`}
+            [&_pre]:bg-black/20 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:text-xs
+            ${isLargeTile ? "line-clamp-[24]" : "line-clamp-6"}`}
           style={{ color: textColor }}
           dangerouslySetInnerHTML={{ __html: tile.content }}
         />
       ) : (
         <div
           className={`flex-1 text-sm opacity-90 mb-3 italic ${
-            isLargeTile ? "line-clamp-[16]" : "line-clamp-3"
+            isLargeTile ? "line-clamp-[24]" : "line-clamp-6"
           }`}
           style={{ color: textColor }}
         >
@@ -222,6 +231,6 @@ export function TileCard({ tile, onClick, dragListeners }: TileCardProps) {
       <div className="text-xs opacity-75 mt-auto">
         {timeAgo}
       </div>
-    </button>
+    </div>
   );
 }

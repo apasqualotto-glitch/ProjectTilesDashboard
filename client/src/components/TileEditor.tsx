@@ -238,6 +238,7 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
       [{ header: [1, 2, 3, false] }],
       ["bold", "italic", "underline", "strike"],
       [{ list: "ordered" }, { list: "bullet" }, { list: "check" }],
+      [{ indent: "-1" }, { indent: "+1" }],
       ["blockquote", "code-block"],
       ["link"],
       ["clean"],
@@ -245,8 +246,14 @@ export function TileEditor({ tileId, onClose }: TileEditorProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="absolute inset-y-0 right-0 w-full md:w-[600px] lg:w-[800px] bg-background shadow-2xl animate-in slide-in-from-right duration-400 flex flex-col">
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-300"
+      onClick={onClose}
+    >
+      <div
+        className="absolute inset-y-0 right-0 w-full md:w-[600px] lg:w-[800px] bg-background shadow-2xl animate-in slide-in-from-right duration-400 flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div
           className="flex items-center justify-between p-6 border-b"
